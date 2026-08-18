@@ -72,6 +72,16 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
             }
         }
+
+        // Non-blocking update check (silent no-op on any failure).
+        Thread {
+            try {
+                val pkg = packageManager.getPackageInfo(packageName, 0)
+                UpdateChecker.check(this, pkg.versionName ?: "0.0")
+            } catch (e: Throwable) {
+                // Never let an update-check failure affect the app.
+            }
+        }.start()
     }
 
     override fun onNewIntent(intent: Intent) {

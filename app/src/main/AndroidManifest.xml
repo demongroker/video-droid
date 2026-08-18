@@ -7,6 +7,7 @@
         android:maxSdkVersion="28" />
 
     <application
+        android:name=".App"
         android:label="VideoDroid"
         android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
