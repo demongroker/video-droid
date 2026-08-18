@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         if (url.isEmpty()) { status.text = "Paste a link first"; return }
 
         val dlQ = dlQuality.selectedItem.toString()
-        val expH = exportHeight.selectedItem.toString().substringBefore(" ").toInt()
+        val expH = exportHeight.selectedItem.toString().substringBefore("p").toInt()
         val aspectRaw = aspectRatio.selectedItem.toString()
         val aspect = if (aspectRaw == "original") "original" else aspectRaw.replace(" ", ":")
         val trimOn = trimSwitch.isChecked

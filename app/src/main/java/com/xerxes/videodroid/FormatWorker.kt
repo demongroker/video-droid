@@ -98,8 +98,8 @@ object FormatWorker {
         return when {
             mode == "crop" && sr >= r -> "crop=ih*$r:ih:(iw-ih*$r)/2:0,scale=-2:$height,fps=$fps"
             mode == "crop"          -> "crop=iw:iw/$r:0:(ih-iw/$r)/2,scale=-2:$height,fps=$fps"
-            sr >= r                 -> "pad=iw:iw/$r:0:(ih-iw/$r)/2:black,scale=-2:$height,fps=$fps"
-            else                    -> "pad=ih*$r:ih:(iw-ih*$r)/2:0:black,scale=-2:$height,fps=$fps"
+            sr >= r                 -> "pad=iw:iw/$r:0:(iw/$r-ih)/2:black,scale=-2:$height,fps=$fps"
+            else                    -> "pad=ih*$r:ih:(ih*$r-iw)/2:0:black,scale=-2:$height,fps=$fps"
         }
     }
 
