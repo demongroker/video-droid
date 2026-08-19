@@ -3,6 +3,9 @@ package com.xerxes.videodroid
 import android.app.Activity
 import android.app.ProgressDialog
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -170,6 +173,15 @@ object UpdateChecker {
                     Toast.makeText(act, "Update download failed", Toast.LENGTH_LONG).show()
                     return@runOnUiThread
                 }
+                if (!apkSigningMatchesInstalled(act, file)) {
+                    file.delete()
+                    Toast.makeText(
+                        act,
+                        "Update refused: signing certificate does not match the installed app",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@runOnUiThread
+                }
                 promptInstall(act, file)
             }
         }.start()
@@ -224,6 +236,61 @@ object UpdateChecker {
             Log.w(TAG, "APK download failed", e)
             null
         }
+    }
+
+    /**
+     * Fail closed: downloaded APK must share a current signing cert with the
+     * installed package (PackageManager signatures / SigningInfo). No skip.
+     */
+    private fun apkSigningMatchesInstalled(activity: Activity, apk: File): Boolean {
+        return try {
+            val pm = activity.packageManager
+            val archiveInfo = archivePackageInfo(pm, apk) ?: return false
+            if (archiveInfo.packageName != activity.packageName) {
+                Log.w(TAG, "APK package ${archiveInfo.packageName} != ${activity.packageName}")
+                return false
+            }
+            val installed = currentSignerBytes(installedPackageInfo(pm, activity.packageName))
+            val archive = currentSignerBytes(archiveInfo)
+            if (installed.isEmpty() || archive.isEmpty()) {
+                Log.w(TAG, "Signing certs missing installed=${installed.size} apk=${archive.size}")
+                return false
+            }
+            archive.any { incoming -> installed.any { it.contentEquals(incoming) } }
+        } catch (e: Throwable) {
+            Log.w(TAG, "APK signing check failed", e)
+            false
+        }
+    }
+
+    private fun installedPackageInfo(pm: PackageManager, packageName: String): PackageInfo? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+        }
+    }
+
+    private fun archivePackageInfo(pm: PackageManager, apk: File): PackageInfo? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pm.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_SIGNATURES)
+        }
+    }
+
+    private fun currentSignerBytes(info: PackageInfo?): List<ByteArray> {
+        if (info == null) return emptyList()
+        val sigs: Array<Signature>? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val si = info.signingInfo ?: return emptyList()
+            si.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            info.signatures
+        }
+        return sigs.orEmpty().map { it.toByteArray() }.filter { it.isNotEmpty() }
     }
 
     private fun promptInstall(activity: Activity, apk: File) {

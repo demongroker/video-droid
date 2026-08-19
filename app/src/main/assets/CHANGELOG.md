@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.9 (versionCode 36)
+
+- Updater: fail-closed same-signing-certificate check before install.
+
 ## 1.6.8 (versionCode 35)
 
 - Open page loads last job URL (persisted; survives process death).
