@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.14 (versionCode 41)
+
+- Encode quality bump: h264_mediacodec 20M / 30M (≥1080), bufsize 2×; mpeg4 `-q:v 3`.
+
 ## 1.6.13 (versionCode 40)
 
 - Queue file corrupt: keep a timestamped backup (`download_queue.json.bad.<ts>`), show `Queue file corrupt. Backup kept.`, and start empty instead of silently dropping the file.

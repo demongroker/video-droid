@@ -354,7 +354,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
         persistCurrent(custom = false)
 
-        val opts = FormatOptions(dlQ, 0, aspect, 0, 4, trimOn, tStart, tEnd, exportOn)
+        val opts = FormatOptions(dlQ, 0, aspect, 0, 3, trimOn, tStart, tEnd, exportOn)
         lastResultUri = null
         lastFailUrl = url
         OpenPageActivity.storeJobUrl(this, url)

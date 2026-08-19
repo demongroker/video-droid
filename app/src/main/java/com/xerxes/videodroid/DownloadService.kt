@@ -43,7 +43,7 @@ class DownloadService : Service() {
                         dlQuality = intent.getStringExtra(EXTRA_DLQ) ?: "720p",
                         exportHeight = intent.getIntExtra(EXTRA_HEIGHT, 1080),
                         aspect = intent.getStringExtra(EXTRA_ASPECT) ?: "original",
-                        crf = intent.getIntExtra(EXTRA_QV, 4),
+                        crf = intent.getIntExtra(EXTRA_QV, 3),
                         trimEnabled = intent.getBooleanExtra(EXTRA_TRIM, true),
                         trimStart = intent.getIntExtra(EXTRA_TSTART, 1),
                         trimEnd = intent.getIntExtra(EXTRA_TEND, 1),

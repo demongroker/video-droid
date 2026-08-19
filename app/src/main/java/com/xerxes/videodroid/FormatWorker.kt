@@ -26,7 +26,7 @@ data class FormatOptions(
     val exportHeight: Int,
     val aspect: String,
     val fps: Int = 30,
-    val crf: Int = 4,
+    val crf: Int = 3,
     val trimEnabled: Boolean = true,
     val trimStart: Int = 1,
     val trimEnd: Int = 1,
@@ -436,8 +436,8 @@ object FormatWorker {
         if (encoder == "mpeg4") {
             args.addAll(listOf("-q:v", opts.crf.toString()))
         } else if (encoder == "h264_mediacodec") {
-            val bv = if (srcHeight >= 1080) "24M" else "16M"
-            args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "48M" else "32M"))
+            val bv = if (srcHeight >= 1080) "30M" else "20M"
+            args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "60M" else "40M"))
         }
         // Keep source fps: never pass -r.
         args.addAll(
