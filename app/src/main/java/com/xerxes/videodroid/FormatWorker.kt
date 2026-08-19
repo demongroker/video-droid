@@ -35,8 +35,10 @@ object FormatWorker {
             // 1. download via yt-dlp (bundled Python / Chaquopy) -> returns JSON with path + dims
             status("Downloading...")
             val py = Python.getInstance()
+            val cookies = XCookies.file(context)
+            val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
             val result = py.getModule("dl")
-                .callAttr("download", url, opts.dlQuality, work.absolutePath, "source")
+                .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
                 .toString()
             val info = JSONObject(result)
             val src = File(info.getString("path"))

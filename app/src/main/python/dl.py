@@ -9,7 +9,7 @@ import os
 import yt_dlp
 
 
-def download(url, quality, outdir, filename="source"):
+def download(url, quality, outdir, filename="source", cookiefile=None):
     fmt = {
         "best": "best",
         "1080p": "best[height<=1080]/best",
@@ -29,6 +29,8 @@ def download(url, quality, outdir, filename="source"):
         # Match the desktop recipe: use YouTube's android client (more reliable).
         "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
+    if cookiefile and os.path.isfile(cookiefile):
+        opts["cookiefile"] = cookiefile
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
 

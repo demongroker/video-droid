@@ -43,6 +43,14 @@ class MainActivity : AppCompatActivity() {
         goButton = findViewById(R.id.goButton)
         status = findViewById(R.id.status)
 
+        findViewById<Button>(R.id.loginXButton).setOnClickListener {
+            startActivity(Intent(this, XLoginActivity::class.java))
+        }
+        findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
+            XCookies.clear(this)
+            status.text = "X login cleared"
+        }
+
         fun spinner(s: Spinner, values: Array<String>) {
             ArrayAdapter(this, android.R.layout.simple_spinner_item, values).also {
                 it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
