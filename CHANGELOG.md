@@ -2,6 +2,12 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.27 (versionCode 54)
+
+- **mpeg4 last-resort fallback**: encode now tries 4 attempts instead of 3. If hwaccel, software decode, and software+format all fail, the final attempt uses the **mpeg4** software encoder (`-c:v mpeg4 -q:v 4`). This decodes whatever FFmpeg's software decoders can handle and always produces a playable MP4 — even for sources that h264_mediacodec rejects (e.g. rc 69 invalid data, empty 261-byte output).
+- Status shows **"Converting (fallback)..."** during the mpeg4 attempt so the user knows the output is MPEG-4 (plays on phone, but not X-uploadable). Success message reads `Saved (mpeg4 — plays on phone, not X-uploadable)` when the fallback was used.
+- Export-ON downloads still require H.264 (AVC) sources — the mpeg4 fallback only applies when a downloaded source happens to be undecodable by h264_mediacodec.
+
 ## 1.6.26 (versionCode 53)
 
 - **"best" removed**: quality dropdown is now 4K / 1080p / 720p / 480p only. All social presets (X, TikTok, Shorts, Reels, YouTube, Instagram, Facebook) and Recommended default to **1080p**.

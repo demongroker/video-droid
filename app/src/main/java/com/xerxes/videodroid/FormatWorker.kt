@@ -216,6 +216,9 @@ object FormatWorker {
             }
 
             var encodeSrc = src
+            // True when the mpeg4 last-resort encoder produced the output.
+            // The saved file then plays on the phone but is not X-uploadable.
+            var usedMpeg4 = false
             fun remuxSource(): Boolean {
                 if (cancelRequested.get()) return false
                 if (remux.exists()) remux.delete()
@@ -312,6 +315,33 @@ object FormatWorker {
                     val vfWithFormat = if (vf.isNullOrBlank()) "format=yuv420p" else "$vf,format=yuv420p"
                     session = tryEncode(encodeSrc, false, vfWithFormat)
                 }
+                // Attempt 4 (final): mpeg4 software encoder — last-resort fallback for
+                // sources the h264_mediacodec path cannot decode (e.g. rc 69 invalid
+                // data, empty output). Software decode + mpeg4 encode handles whatever
+                // the software decoder can read. Output plays on the phone but is NOT
+                // X-uploadable (X rejects MPEG-4 Part 2).
+                if (session == null && !cancelRequested.get()) {
+                    if (out.exists()) out.delete()
+                    emit("Converting (fallback)...")
+                    val fbArgs = buildFfmpegArgs(
+                        encodeSrc, out, vf, opts, tStart, tEnd, known, keep,
+                        "mpeg4", srcHeight = height, noHwaccel = true,
+                    )
+                    session = executeConvert(fbArgs, expectedMs, emit, "Converting (fallback)")
+                    JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+                    if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                    val produced = out.exists() && out.length() >= 1024
+                    if (!ReturnCode.isSuccess(session.returnCode) || !produced) {
+                        JobDiag.noteFfmpeg(
+                            "encode-failed",
+                            "rc=${session.returnCode?.value ?: "?"} bytes=${if (out.exists()) out.length() else 0} mpeg4-fallback",
+                        )
+                        if (out.exists()) out.delete()
+                        session = null
+                    } else {
+                        usedMpeg4 = true
+                    }
+                }
             }
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
             fun keepDownloaded(reason: String): FormatResult {
@@ -331,7 +361,7 @@ object FormatWorker {
                 return FormatResult(false, msg, uri)
             }
             if (session == null) {
-                return keepDownloaded("Could not decode this video on this phone. Try quality 1080 (H.264) instead of best (HEVC).")
+                return keepDownloaded("Could not decode this video on this phone (even mpeg4 fallback). Try quality 1080 (H.264) instead of best (HEVC).")
             }
             val done = session ?: return keepDownloaded("FFmpeg produced no output")
             if (!ReturnCode.isSuccess(done.returnCode)) {
@@ -347,7 +377,13 @@ object FormatWorker {
             if (!isPersistedSource(context, src)) src.delete()
             out.delete(); if (remux.exists()) remux.delete()
             JobDiag.finishJob()
-            FormatResult(true, "Saved", uri)
+            if (usedMpeg4) {
+                val msg = "Saved (mpeg4 — plays on phone, not X-uploadable)"
+                emit(msg)
+                FormatResult(true, msg, uri)
+            } else {
+                FormatResult(true, "Saved", uri)
+            }
         } catch (e: Throwable) {
             JobDiag.noteException(e.message ?: e.toString())
             JobDiag.finishJob()
@@ -543,10 +579,15 @@ object FormatWorker {
             args.addAll(listOf("-vf", vf))
         }
         args.addAll(listOf("-c:v", encoder))
-        // h264_mediacodec only: 16M below 1080p, 24M at >=1080p, bufsize 2x.
-        // No libx264 (not in ffmpeg-kit-full 7.1.5), no mpeg4 (X rejects MPEG-4 Part 2).
-        val bv = if (srcHeight >= 1080) "24M" else "16M"
-        args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "48M" else "32M"))
+        if (encoder == "mpeg4") {
+            // mpeg4 software encoder: quality-based, not bitrate-based.
+            args.addAll(listOf("-q:v", "4"))
+        } else {
+            // h264_mediacodec: 16M below 1080p, 24M at >=1080p, bufsize 2x.
+            // No libx264 (not in ffmpeg-kit-full 7.1.5).
+            val bv = if (srcHeight >= 1080) "24M" else "16M"
+            args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "48M" else "32M"))
+        }
         // Keep source fps: never pass -r.
         args.addAll(
             listOf(
