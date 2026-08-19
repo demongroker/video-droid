@@ -523,13 +523,23 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private fun applyExportUi(on: Boolean) {
         exportOptions.visibility = if (on) View.VISIBLE else View.GONE
-        goButton.text = if (on) "Download & Convert" else "Download"
+        refreshGoButton()
+    }
+
+    private fun queueBusy(): Boolean = busy || DownloadQueue.size(this) > 0
+
+    private fun refreshGoButton() {
+        goButton.text = when {
+            queueBusy() -> "Add to queue"
+            exportSwitch.isChecked -> "Download & Convert"
+            else -> "Download"
+        }
     }
 
     private fun setBusy(on: Boolean) {
         busy = on
         goButton.isEnabled = true
-        goButton.text = if (exportSwitch.isChecked) "Download & Convert" else "Download"
+        refreshGoButton()
         cancelButton.visibility = if (on) View.VISIBLE else View.GONE
     }
 

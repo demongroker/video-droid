@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.15 (versionCode 42)
+
+- README catch-up: current product (export, encode quality, remux, Open page / TLS, queue backup, fail-closed install).
+- Download button says **Add to queue** when busy or the queue is not empty.
+
 ## 1.6.14 (versionCode 41)
 
 - Encode quality bump: h264_mediacodec 20M / 30M (≥1080), bufsize 2×; mpeg4 `-q:v 3`.
