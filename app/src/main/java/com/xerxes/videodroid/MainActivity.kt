@@ -158,8 +158,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         exportSwitch.isChecked = prefs.getBoolean(KEY_EXPORT_ON, true)
         selectValue(aspectMode, savedMode, "Original")
         selectValue(aspectRatio, savedRatio, "Portrait 9:16")
-        trimStart.setText(prefs.getInt(KEY_TRIM_START, 1).toString())
-        trimEnd.setText(prefs.getInt(KEY_TRIM_END, 1).toString())
+        trimStart.setText(readTrimPref(prefs, KEY_TRIM_START).toString())
+        trimEnd.setText(readTrimPref(prefs, KEY_TRIM_END).toString())
         suppressPersist = false
         lastFailUrl = OpenPageActivity.loadJobUrl(this).ifEmpty { null }
         applyExportUi(exportSwitch.isChecked)
@@ -390,8 +390,15 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val exportOn = exportSwitch.isChecked
         val aspect = if (exportOn) currentAspectToken() else "original"
         val trimOn = if (exportOn) trimSwitch.isChecked else false
-        val tStart = trimStart.text.toString().toIntOrNull() ?: 1
-        val tEnd = trimEnd.text.toString().toIntOrNull() ?: 1
+        val prefsNow = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val tStart = FormatOptions.parseTrimSeconds(
+            trimStart.text.toString(),
+            readTrimPref(prefsNow, KEY_TRIM_START),
+        )
+        val tEnd = FormatOptions.parseTrimSeconds(
+            trimEnd.text.toString(),
+            readTrimPref(prefsNow, KEY_TRIM_END),
+        )
 
         persistCurrent(custom = false)
 
@@ -424,8 +431,20 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             .putBoolean(KEY_EXPORT_ON, exportOn)
             .putString(KEY_ASPECT_MODE, mode)
             .putString(KEY_ASPECT_RATIO, ratio)
-            .putInt(KEY_TRIM_START, trimStart.text.toString().toIntOrNull() ?: 1)
-            .putInt(KEY_TRIM_END, trimEnd.text.toString().toIntOrNull() ?: 1)
+            .putInt(
+                KEY_TRIM_START,
+                FormatOptions.parseTrimSeconds(
+                    trimStart.text.toString(),
+                    readTrimPref(getSharedPreferences(PREFS, MODE_PRIVATE), KEY_TRIM_START),
+                ),
+            )
+            .putInt(
+                KEY_TRIM_END,
+                FormatOptions.parseTrimSeconds(
+                    trimEnd.text.toString(),
+                    readTrimPref(getSharedPreferences(PREFS, MODE_PRIVATE), KEY_TRIM_END),
+                ),
+            )
         if (custom && !isRecommendedSelection()) {
             ed.putString(KEY_CUSTOM_QUALITY, dlQ)
                 .putBoolean(KEY_CUSTOM_EXPORT_ON, exportOn)
@@ -732,8 +751,12 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val quality = opts?.dlQuality ?: (dlQuality.selectedItem?.toString() ?: "?")
         val aspect = opts?.aspect ?: aspectRatio.selectedItem?.toString() ?: "?"
         val trimOn = opts?.trimEnabled ?: trimSwitch.isChecked
-        val tStart = opts?.trimStart ?: (trimStart.text.toString().toIntOrNull() ?: 1)
-        val tEnd = opts?.trimEnd ?: (trimEnd.text.toString().toIntOrNull() ?: 1)
+        val tStart = FormatOptions.clampTrimSeconds(
+            opts?.trimStart ?: FormatOptions.parseTrimSeconds(trimStart.text.toString()),
+        )
+        val tEnd = FormatOptions.clampTrimSeconds(
+            opts?.trimEnd ?: FormatOptions.parseTrimSeconds(trimEnd.text.toString()),
+        )
         val qSize = DownloadQueue.size(this)
         val durKnown = JobDiag.durationKnown
         val durLine = when (durKnown) {
@@ -762,6 +785,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("videodroid-log", blob))
         status.text = "Log copied"
+    }
+
+    private fun readTrimPref(prefs: android.content.SharedPreferences, key: String): Int {
+        return try {
+            FormatOptions.clampTrimSeconds(prefs.getInt(key, FormatOptions.DEFAULT_TRIM_S))
+        } catch (_: Throwable) {
+            FormatOptions.DEFAULT_TRIM_S
+        }
     }
 
     private fun firstUrl(t: String): String {

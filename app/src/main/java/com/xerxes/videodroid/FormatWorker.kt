@@ -45,6 +45,27 @@ data class FormatOptions(
         val trim = if (trimEnabled) "trim ${trimStart}s/${trimEnd}s" else "trim off"
         return "$dlQuality · ${aspectLabel()} · $trim"
     }
+
+    companion object {
+        const val DEFAULT_TRIM_S = 1
+        /** Per-side cap so corrupt prefs cannot feed insane -ss/-t. */
+        const val MAX_TRIM_S = 86_400
+
+        fun clampTrimSeconds(raw: Int?, lastGood: Int = DEFAULT_TRIM_S): Int {
+            val v = raw ?: return fallback(lastGood)
+            if (v < 0 || v > MAX_TRIM_S) return fallback(lastGood)
+            return v
+        }
+
+        fun parseTrimSeconds(text: String?, lastGood: Int = DEFAULT_TRIM_S): Int {
+            return clampTrimSeconds(text?.trim()?.toIntOrNull(), lastGood)
+        }
+
+        private fun fallback(lastGood: Int): Int {
+            if (lastGood in 0..MAX_TRIM_S) return lastGood
+            return DEFAULT_TRIM_S
+        }
+    }
 }
 
 object FormatWorker {
@@ -148,8 +169,8 @@ object FormatWorker {
             var duration = info.optDouble("duration", 0.0)
             if (duration <= 0) duration = probeDuration(src)
 
-            val tStart = if (opts.trimEnabled) opts.trimStart.coerceAtLeast(0) else 0
-            val tEnd = if (opts.trimEnabled) opts.trimEnd.coerceAtLeast(0) else 0
+            val tStart = if (opts.trimEnabled) FormatOptions.clampTrimSeconds(opts.trimStart) else 0
+            val tEnd = if (opts.trimEnabled) FormatOptions.clampTrimSeconds(opts.trimEnd) else 0
             val known = duration > 0
             JobDiag.noteDuration(known, duration)
             val keep = if (known) duration - tStart - tEnd else Double.NaN

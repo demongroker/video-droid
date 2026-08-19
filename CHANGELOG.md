@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.19 (versionCode 46)
+
+- Clamp trim start/end prefs to 0–86400s (fallback last-good / 1s). Corrupt or huge saved values no longer feed insane FFmpeg `-ss`/`-t`. Applied on save, queue JSON, and service extras.
+
 ## 1.6.18 (versionCode 45)
 
 - MIT LICENSE at repo root.

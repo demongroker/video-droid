@@ -45,8 +45,8 @@ class DownloadService : Service() {
                         aspect = intent.getStringExtra(EXTRA_ASPECT) ?: "original",
                         crf = intent.getIntExtra(EXTRA_QV, 3),
                         trimEnabled = intent.getBooleanExtra(EXTRA_TRIM, true),
-                        trimStart = intent.getIntExtra(EXTRA_TSTART, 1),
-                        trimEnd = intent.getIntExtra(EXTRA_TEND, 1),
+                        trimStart = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TSTART, 1)),
+                        trimEnd = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TEND, 1)),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
                     )
                     DownloadQueue.enqueue(applicationContext, QueuedJob(url, opts))
