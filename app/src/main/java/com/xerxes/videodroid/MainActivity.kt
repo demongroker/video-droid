@@ -20,6 +20,8 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
+import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -83,6 +85,22 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
+        findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
+        findViewById<Button>(R.id.presetX).setOnClickListener {
+            applySocialPreset("X", exportOn = true, quality = "best", mode = "Fit", ratio = "Portrait 9:16")
+        }
+        findViewById<Button>(R.id.presetTikTok).setOnClickListener {
+            applySocialPreset("TikTok / Shorts / Reels", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+        }
+        findViewById<Button>(R.id.presetYouTube).setOnClickListener {
+            applySocialPreset("YouTube", exportOn = true, quality = "best", mode = "Original", ratio = "Portrait 9:16")
+        }
+        findViewById<Button>(R.id.presetInstagram).setOnClickListener {
+            applySocialPreset("Instagram", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 4:5")
+        }
+        findViewById<Button>(R.id.presetFacebook).setOnClickListener {
+            applySocialPreset("Facebook", exportOn = true, quality = "best", mode = "Fit", ratio = "Landscape 16:9")
+        }
 
         moreToggle.setOnClickListener {
             val open = moreSection.visibility != View.VISIBLE
@@ -96,7 +114,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
                 s.adapter = it
             }
         }
-        val qualities = arrayOf("best", "1080p", "720p", "480p")
+        val qualities = arrayOf("best", "4K", "1080p", "720p", "480p")
         val modes = arrayOf("Original", "Fill", "Fit")
         val ratios = arrayOf(
             "Landscape 16:9", "Landscape 4:3", "Landscape 21:9",
@@ -190,12 +208,21 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }.start()
     }
 
+    fun jobIsRunning(): Boolean = busy || DownloadQueue.size(this) > 0
+
     fun showUpdateStatus(msg: String) {
-        runOnUiThread { status.text = msg }
+        runOnUiThread {
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            if (!jobIsRunning()) status.text = msg
+        }
     }
 
     private fun checkUpdateNow() {
-        status.text = "Checking update…"
+        if (jobIsRunning()) {
+            Toast.makeText(this, "Checking update…", Toast.LENGTH_SHORT).show()
+        } else {
+            status.text = "Checking update…"
+        }
         Thread {
             try {
                 val pkg = packageManager.getPackageInfo(packageName, 0)
@@ -304,15 +331,15 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         if (url.isEmpty()) { status.text = "Paste a link first"; return }
 
         val dlQ = dlQuality.selectedItem.toString()
-        val aspect = currentAspectToken()
-        val trimOn = trimSwitch.isChecked
+        val exportOn = exportSwitch.isChecked
+        val aspect = if (exportOn) currentAspectToken() else "original"
+        val trimOn = if (exportOn) trimSwitch.isChecked else false
         val tStart = trimStart.text.toString().toIntOrNull() ?: 1
         val tEnd = trimEnd.text.toString().toIntOrNull() ?: 1
 
         persistCurrent(custom = false)
 
-        val exportOn = exportSwitch.isChecked
-        val opts = FormatOptions(dlQ, 0, aspect, 0, 6, trimOn, tStart, tEnd, exportOn)
+        val opts = FormatOptions(dlQ, 0, aspect, 0, 4, trimOn, tStart, tEnd, exportOn)
         lastResultUri = null
         lastFailUrl = url
         openPageButton.visibility = View.GONE
@@ -404,6 +431,51 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         applyExportUi(exportSwitch.isChecked)
         applyAspectModeUi()
         status.text = "Restored your last settings"
+    }
+
+    private fun applySocialPreset(name: String, exportOn: Boolean, quality: String, mode: String, ratio: String) {
+        suppressPersist = true
+        selectValue(dlQuality, quality)
+        exportSwitch.isChecked = exportOn
+        selectValue(aspectMode, mode)
+        selectValue(aspectRatio, ratio)
+        trimSwitch.isChecked = false
+        applyExportUi(exportOn)
+        applyAspectModeUi()
+        applyTrimOnOff(false)
+        suppressPersist = false
+        persistCurrent(custom = true)
+        clearRecommendedNotice()
+        if (!jobIsRunning()) {
+            status.text = "$name: $quality / $mode${if (mode == "Original") "" else " $ratio"} / trim off"
+        } else {
+            Toast.makeText(this, "$name preset applied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showChangelog() {
+        val text = loadChangelogText()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val tv = TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setPadding(pad, pad, pad, pad)
+            setTextIsSelectable(true)
+        }
+        val scroll = ScrollView(this).apply { addView(tv) }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Changelog")
+            .setView(scroll)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun loadChangelogText(): String {
+        return try {
+            assets.open("CHANGELOG.md").bufferedReader().use { it.readText() }
+        } catch (_: Throwable) {
+            BAKED_CHANGELOG
+        }
     }
 
     private fun selectValue(s: Spinner, value: String) {
@@ -542,5 +614,18 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         private const val KEY_BATTERY_ASKED = "battery_opt_asked"
         private const val REQ_POST_NOTIF = 2
         private const val REQ_OPEN_PAGE = 3
+        private const val BAKED_CHANGELOG = """## 1.6.1 (versionCode 28)
+- best = 1080 cap; new 4K option
+- Export Off = original only (hide Fill/Fit/trim)
+- Check update: Toast only while a job is running
+- Encode: h264_mediacodec 16M/24M (bufsize 2x); mpeg4 -q:v 4
+- In-app changelog; social presets override all settings
+
+## 1.6.0 (versionCode 27)
+- Fill/Fit + grouped ratios; short-title filenames
+
+## 1.5.9 (versionCode 26)
+- Job status quality/aspect/trim; Check update Tailscale fallback
+"""
     }
 }

@@ -63,7 +63,7 @@ object DownloadQueue {
                             exportHeight = o.optInt("height", 1080),
                             aspect = o.optString("aspect", "original"),
                             fps = o.optInt("fps", 30),
-                            crf = o.optInt("qv", 6),
+                            crf = o.optInt("qv", 4),
                             trimEnabled = o.optBoolean("trim", true),
                             trimStart = o.optInt("tstart", 1),
                             trimEnd = o.optInt("tend", 1),

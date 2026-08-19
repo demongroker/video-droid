@@ -286,11 +286,12 @@ def _classify_twitter_error(err, had_cookies):
 def download(url, quality, outdir, filename="source", cookiefile=None, progress=None):
     # Muxed `best` is often missing on android/ios clients; always allow adaptive merge.
     fmt = {
-        "best": "bv*+ba/b",
-        "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
-        "720p": "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b",
-        "480p": "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
-    }.get(quality, "bv*+ba/b")
+        "best": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
+        "4K": "bv*[height<=2160]+ba/b",
+        "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
+        "720p": "bv*[height<=720]+ba/b[height<=720]/bv*[height<=720]/b",
+        "480p": "bv*[height<=480]+ba/b[height<=480]/bv*[height<=480]/b",
+    }.get(quality, "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b")
 
     global _progress_cb, _last_status, _last_pct, _last_t
     _progress_cb = progress

@@ -53,8 +53,11 @@ object UpdateChecker {
     private fun report(activity: Activity, msg: String) {
         activity.runOnUiThread {
             if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
-            Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
-            if (activity is MainActivity) activity.showUpdateStatus(msg)
+            if (activity is MainActivity) {
+                activity.showUpdateStatus(msg)
+            } else {
+                Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
