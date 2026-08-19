@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.4 (versionCode 31)
+
+- YouTube (and similar) `Requested format is not available` on **best**: short UI reason — that format is gone; try 1080 or Open page. Not a generic dump.
+
 ## 1.6.3 (versionCode 30)
 
 - Cancel aborts extract_info / urlopen / X GraphQL promptly (not only download hooks). Socket timeout remains the hang upper bound.

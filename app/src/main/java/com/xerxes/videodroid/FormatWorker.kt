@@ -213,6 +213,9 @@ object FormatWorker {
         if (s.contains("404") || s.contains("not found")) {
             return "File gone (404)"
         }
+        if (s.contains("requested format is not available") || s.contains("format is not available")) {
+            return "That format is gone. Try 1080 or Open page."
+        }
         if (s.contains("need x login")) return "Need X login"
         if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
             return "No video in this tweet"
