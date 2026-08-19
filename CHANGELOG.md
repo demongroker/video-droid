@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.7 (versionCode 34)
+
+- Convert/pad/encode fail: keep the yt-dlp file (save to Downloads) and say so. Do not delete the successful download.
+
 ## 1.6.6 (versionCode 33)
 
 - Fit pad never smaller than frame (3:4 720p)

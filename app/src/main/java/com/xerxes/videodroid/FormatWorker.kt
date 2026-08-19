@@ -179,12 +179,27 @@ object FormatWorker {
                 }
             }
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-            val done = session ?: return FormatResult(false, "FFmpeg produced no output")
+            fun keepDownloaded(reason: String): FormatResult {
+                if (out.exists()) out.delete()
+                val ext = src.extension.ifEmpty { "mp4" }
+                val name = fileName(opts, ext, title)
+                val uri = saveToDownloads(context, src, name, mimeForExt(ext))
+                val msg = if (uri != null) {
+                    src.delete()
+                    "Convert failed. Kept original in Downloads. $reason"
+                } else {
+                    "Convert failed. Original download kept. $reason"
+                }
+                emit(msg)
+                JobDiag.finishJob()
+                return FormatResult(false, msg, uri)
+            }
+            val done = session ?: return keepDownloaded("FFmpeg produced no output")
             if (!ReturnCode.isSuccess(done.returnCode)) {
                 val tail = (done.output ?: "").takeLast(400)
-                return FormatResult(false, mapError("FFmpeg error: $tail"))
+                return keepDownloaded(mapError("FFmpeg error: $tail"))
             }
-            if (!out.exists()) return FormatResult(false, "FFmpeg produced no output")
+            if (!out.exists()) return keepDownloaded("FFmpeg produced no output")
 
             emit("Saving to phone...")
             val name = fileName(opts, "mp4", title)
