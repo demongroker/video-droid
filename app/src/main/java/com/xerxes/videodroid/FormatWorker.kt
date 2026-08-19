@@ -149,10 +149,58 @@ object FormatWorker {
 
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
             val out = File(work, "out.mp4")
+            val remux = File(work, "remux.mp4")
             val expectedMs = when {
                 opts.trimEnabled && known && keep > 1.0 -> keep * 1000.0
                 duration > 0 -> duration * 1000.0
                 else -> 0.0
+            }
+
+            var encodeSrc = src
+            fun remuxSource(): Boolean {
+                if (cancelRequested.get()) return false
+                if (remux.exists()) remux.delete()
+                emit("Remuxing...")
+                val copyRemux = arrayOf(
+                    "-y", "-v", "error", "-i", src.absolutePath,
+                    "-c", "copy", "-movflags", "+faststart", remux.absolutePath,
+                )
+                var rs = executeConvert(copyRemux, 0.0, emit, "Remuxing")
+                JobDiag.noteFfmpeg(rs.returnCode?.toString() ?: "null", rs.output)
+                if (!ReturnCode.isSuccess(rs.returnCode) || !remux.exists() || remux.length() <= 0L) {
+                    if (remux.exists()) remux.delete()
+                    if (cancelRequested.get()) return false
+                    val aacRemux = arrayOf(
+                        "-y", "-v", "error", "-i", src.absolutePath,
+                        "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                        "-movflags", "+faststart", remux.absolutePath,
+                    )
+                    rs = executeConvert(aacRemux, 0.0, emit, "Remuxing")
+                    JobDiag.noteFfmpeg(rs.returnCode?.toString() ?: "null", rs.output)
+                }
+                if (!ReturnCode.isSuccess(rs.returnCode) || !remux.exists() || remux.length() <= 0L) {
+                    if (remux.exists()) remux.delete()
+                    return false
+                }
+                encodeSrc = remux
+                return true
+            }
+
+            fun encodePadCrop(input: File): com.arthenica.ffmpegkit.FFmpegSession {
+                if (out.exists()) out.delete()
+                emit("Converting (fast)...")
+                val fastArgs = buildFfmpegArgs(input, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec", srcHeight = height)
+                var s = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
+                JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
+                if (cancelRequested.get()) return s
+                if (!ReturnCode.isSuccess(s.returnCode)) {
+                    if (out.exists()) out.delete()
+                    emit("Converting (fallback)...")
+                    val fbArgs = buildFfmpegArgs(input, out, vf, opts, tStart, tEnd, known, keep, "mpeg4", srcHeight = height)
+                    s = executeConvert(fbArgs, expectedMs, emit, "Converting")
+                    JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
+                }
+                return s
             }
 
             var session: com.arthenica.ffmpegkit.FFmpegSession? = null
@@ -166,22 +214,21 @@ object FormatWorker {
             if (session == null || !ReturnCode.isSuccess(session.returnCode)) {
                 if (out.exists()) out.delete()
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                emit("Converting (fast)...")
-                val fastArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec", srcHeight = height)
-                session = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
-                JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+                if (!isCleanMp4(src)) remuxSource()
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                if (!ReturnCode.isSuccess(session.returnCode)) {
-                    if (out.exists()) out.delete()
-                    emit("Converting (fallback)...")
-                    val fbArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "mpeg4", srcHeight = height)
-                    session = executeConvert(fbArgs, expectedMs, emit, "Converting")
-                    JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+                session = encodePadCrop(encodeSrc)
+                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                if (!ReturnCode.isSuccess(session.returnCode) && isInvalidData(session) && encodeSrc === src) {
+                    if (remuxSource()) {
+                        if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                        session = encodePadCrop(encodeSrc)
+                    }
                 }
             }
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
             fun keepDownloaded(reason: String): FormatResult {
                 if (out.exists()) out.delete()
+                if (remux.exists()) remux.delete()
                 val ext = src.extension.ifEmpty { "mp4" }
                 val name = fileName(opts, ext, title)
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
@@ -206,7 +253,7 @@ object FormatWorker {
             val name = fileName(opts, "mp4", title)
             val uri = saveToDownloads(context, out, name)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
-            src.delete(); out.delete()
+            src.delete(); out.delete(); if (remux.exists()) remux.delete()
             JobDiag.finishJob()
             FormatResult(true, "Saved", uri)
         } catch (e: Throwable) {
@@ -266,6 +313,19 @@ object FormatWorker {
     private fun isCancelMessage(msg: String?): Boolean {
         val s = msg?.lowercase() ?: return false
         return s.contains("cancel")
+    }
+
+    /** Container already MP4/M4V — skip pre-encode remux unless decode fails. */
+    private fun isCleanMp4(file: File): Boolean {
+        val ext = file.extension.lowercase()
+        return ext == "mp4" || ext == "m4v"
+    }
+
+    /** FFmpeg AVERROR_INVALIDDATA (69) or "Invalid data found when processing input". */
+    private fun isInvalidData(session: com.arthenica.ffmpegkit.FFmpegSession): Boolean {
+        val rc = session.returnCode?.value ?: 0
+        val tail = session.output ?: ""
+        return rc == 69 || tail.contains("Invalid data", ignoreCase = true)
     }
 
     /**
