@@ -249,7 +249,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         super.onStart()
         DownloadService.listener = this
         val q = DownloadQueue.size(this)
-        if (q > 0) {
+        val corrupt = DownloadQueue.consumeCorruptNotice()
+        if (corrupt != null) {
+            status.text = corrupt
+        } else if (q > 0) {
             setBusy(true)
             val wait = DownloadQueue.waiting(this)
             status.text = if (wait > 0) "Queued ($wait)\nWorking..." else "Working..."

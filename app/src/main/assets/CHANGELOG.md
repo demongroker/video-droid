@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.13 (versionCode 40)
+
+- Queue file corrupt: keep a timestamped backup (`download_queue.json.bad.<ts>`), show `Queue file corrupt. Backup kept.`, and start empty instead of silently dropping the file.
+
 ## 1.6.12 (versionCode 39)
 
 - Cancel targets the active job only: FFmpegKit.cancel(sessionId) for the running convert, not a global cancel that can kill the next queued job.

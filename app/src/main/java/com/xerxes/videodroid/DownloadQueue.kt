@@ -1,6 +1,7 @@
 package com.xerxes.videodroid
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -13,7 +14,19 @@ data class QueuedJob(val url: String, val opts: FormatOptions)
  */
 object DownloadQueue {
     private const val FILE = "download_queue.json"
+    private const val TAG = "VideoDroid.Queue"
+    private const val CORRUPT_MSG = "Queue file corrupt. Backup kept."
     private val lock = Any()
+
+    @Volatile
+    var lastCorruptNotice: String? = null
+        private set
+
+    fun consumeCorruptNotice(): String? {
+        val m = lastCorruptNotice
+        lastCorruptNotice = null
+        return m
+    }
 
     fun enqueue(ctx: Context, job: QueuedJob): Int = synchronized(lock) {
         val jobs = loadLocked(ctx)
@@ -74,7 +87,24 @@ object DownloadQueue {
             }
             out
         } catch (_: Throwable) {
+            backupCorrupt(f)
+            lastCorruptNotice = CORRUPT_MSG
+            JobDiag.noteStatus(CORRUPT_MSG)
+            JobDiag.noteException(CORRUPT_MSG)
+            Log.e(TAG, CORRUPT_MSG)
             mutableListOf()
+        }
+    }
+
+    private fun backupCorrupt(src: File) {
+        val stamp = System.currentTimeMillis()
+        val dest = File(src.parentFile, "${src.name}.bad.$stamp")
+        try {
+            src.copyTo(dest, overwrite = false)
+        } catch (_: Throwable) {
+            try {
+                dest.writeText(src.readText())
+            } catch (_: Throwable) { }
         }
     }
 
