@@ -49,14 +49,22 @@ data class FormatOptions(
 
 object FormatWorker {
     private val cancelRequested = AtomicBoolean(false)
+    /** Active FFmpeg session only — never FFmpegKit.cancel() with no id. */
+    private val activeFfmpegSessionId = AtomicLong(-1L)
 
     fun requestCancel() {
         cancelRequested.set(true)
         try {
             Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
         } catch (_: Throwable) { }
+        cancelActiveFfmpegOnly()
+    }
+
+    private fun cancelActiveFfmpegOnly() {
+        val id = activeFfmpegSessionId.get()
+        if (id < 0L) return
         try {
-            FFmpegKit.cancel()
+            FFmpegKit.cancel(id)
         } catch (_: Throwable) { }
     }
 
@@ -331,7 +339,7 @@ object FormatWorker {
     /**
      * Async FFmpeg so StatisticsCallback can update Converting N%.
      * Percent = stats.time_ms / expectedMs. Unknown duration: elapsed wall time, no fake %.
-     * Throttle ~2% or 500ms. Cancel still uses FFmpegKit.cancel().
+     * Throttle ~2% or 500ms. Cancel uses FFmpegKit.cancel(sessionId) for this job only.
      */
     private fun executeConvert(
         args: Array<String>,
@@ -366,10 +374,15 @@ object FormatWorker {
                 }
             },
         )
-        while (!done.await(200, TimeUnit.MILLISECONDS)) {
-            if (cancelRequested.get()) {
-                try { FFmpegKit.cancel() } catch (_: Throwable) { }
+        activeFfmpegSessionId.set(session.sessionId)
+        try {
+            while (!done.await(200, TimeUnit.MILLISECONDS)) {
+                if (cancelRequested.get()) {
+                    cancelActiveFfmpegOnly()
+                }
             }
+        } finally {
+            activeFfmpegSessionId.compareAndSet(session.sessionId, -1L)
         }
         return session
     }

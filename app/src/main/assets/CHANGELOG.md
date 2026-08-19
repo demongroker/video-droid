@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.12 (versionCode 39)
+
+- Cancel targets the active job only: FFmpegKit.cancel(sessionId) for the running convert, not a global cancel that can kill the next queued job.
+
 ## 1.6.11 (versionCode 38)
 
 - Fit 3:4 (and other Fill/Fit) on the phone: remux to MP4 first when the container is not clean MP4; if decode fails (`Invalid data` / AVERROR 69), remux then pad/crop again. Copy remux, then video-copy + AAC if needed.
