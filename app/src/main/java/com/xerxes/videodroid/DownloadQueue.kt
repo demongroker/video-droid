@@ -6,7 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-data class QueuedJob(val url: String, val opts: FormatOptions)
+data class QueuedJob(val url: String, val opts: FormatOptions, val localPath: String = "")
 
 /**
  * FIFO job list persisted under filesDir/download_queue.json so a process death
@@ -82,6 +82,7 @@ object DownloadQueue {
                             trimEnd = FormatOptions.clampTrimSeconds(o.optInt("tend", 1)),
                             exportEnabled = o.optBoolean("export", true),
                         ),
+                        localPath = o.optString("local", ""),
                     ),
                 )
             }
@@ -123,6 +124,7 @@ object DownloadQueue {
                     put("tstart", j.opts.trimStart)
                     put("tend", j.opts.trimEnd)
                     put("export", j.opts.exportEnabled)
+                    put("local", j.localPath)
                 },
             )
         }

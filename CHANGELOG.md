@@ -2,6 +2,14 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.20 (versionCode 47)
+
+- X-safe export: Export On now encodes **H.264 (h264_mediacodec) + AAC only**. No mpeg4 fallback (X rejects MPEG-4 Part 2); if the MediaCodec encoder fails the job fails with a short reason and keeps the original.
+- Encode bitrate back to 16M / 24M (≥1080), bufsize 2× (32M / 48M). No libx264, no forced fps.
+- Re-export last download: change Export / Fit / X preset and run convert again — yt-dlp is skipped when the last source file still exists.
+- **Export local video…**: SAF file picker (Files/Gallery) — pick any video on the phone and run the same H.264 export, no URL needed.
+- Persist last input + output path for re-export.
+
 ## 1.6.19 (versionCode 46)
 
 - Clamp trim start/end prefs to 0–86400s (fallback last-good / 1s). Corrupt or huge saved values no longer feed insane FFmpeg `-ss`/`-t`. Applied on save, queue JSON, and service extras.

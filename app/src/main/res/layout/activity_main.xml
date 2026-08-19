@@ -129,6 +129,17 @@
             android:maxLines="3"
             android:textSize="15sp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/localButton"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="Export local video…"
+            android:textSize="13sp"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

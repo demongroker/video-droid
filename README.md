@@ -3,7 +3,7 @@
 Phone-only Android video downloader. Paste or share a link, pick quality, tap
 Download. yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
-Current release: **1.6.19** (versionCode 46).
+Current release: **1.6.20** (versionCode 47).
 
 ## How to use
 
@@ -15,8 +15,8 @@ Recommended: **best** + **Original** + trim **Off**.
   hidden. FFmpeg is skipped.
 - **Export On:** encode with **Fill** (crop) or **Fit** (pad). Trim is only
   available when Export is On (defaults 1s / 1s).
-- Encode quality: h264_mediacodec **20M** / **30M** (≥1080), bufsize 2×;
-  mpeg4 `-q:v 3`.
+- Encode quality: h264_mediacodec **16M** / **24M** (≥1080), bufsize 2×
+  (32M / 48M). **H.264 + AAC only.** No mpeg4 fallback (X rejects MPEG-4 Part 2).
 - Fill/Fit remuxes to MP4 first when the container is not clean MP4; if decode
   fails, remux then pad/crop again.
 - Failures show a short reason plus **Open page** (in-app WebView; last job

@@ -29,6 +29,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import java.io.File
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -38,6 +39,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private lateinit var urlInput: EditText
     private lateinit var dlQuality: Spinner
+    private lateinit var localButton: Button
     private lateinit var exportSwitch: Switch
     private lateinit var exportOptions: LinearLayout
     private lateinit var moreSection: LinearLayout
@@ -69,6 +71,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
         urlInput = findViewById(R.id.urlInput)
         dlQuality = findViewById(R.id.dlQuality)
+        localButton = findViewById(R.id.localButton)
         exportSwitch = findViewById(R.id.exportSwitch)
         exportOptions = findViewById(R.id.exportOptions)
         moreSection = findViewById(R.id.moreSection)
@@ -206,6 +209,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         goButton.setOnClickListener {
             collapsePresets()
             start()
+        }
+        localButton.setOnClickListener {
+            collapsePresets()
+            pickLocalVideo()
         }
         cancelButton.setOnClickListener {
             collapsePresets()
@@ -346,9 +353,48 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         } catch (_: Throwable) { }
     }
 
+    private fun pickLocalVideo() {
+        if (queueBusy()) {
+            Toast.makeText(this, "Wait for the current job", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "video/*"
+        }
+        try {
+            startActivityForResult(i, REQ_LOCAL_VIDEO)
+        } catch (_: Throwable) {
+            status.text = "No file picker available"
+        }
+    }
+
+    /** Copy a SAF content:// video into app storage so FFmpeg can read it. */
+    private fun copyToAppStorage(uri: Uri): File? {
+        return try {
+            val mime = contentResolver.getType(uri) ?: "video/mp4"
+            val ext = when {
+                mime.contains("quicktime") -> "mov"
+                mime.contains("webm") -> "webm"
+                mime.contains("mkv") -> "mkv"
+                mime.contains("mp2t") -> "ts"
+                mime.contains("avi") -> "avi"
+                else -> "mp4"
+            }
+            val dest = File(filesDir, "local_input.$ext")
+            contentResolver.openInputStream(uri)?.use { ins ->
+                dest.outputStream().use { outs -> ins.copyTo(outs) }
+            }
+            if (dest.exists() && dest.length() > 0) dest else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun start() {
         val url = urlInput.text.toString().trim()
-        if (url.isEmpty()) { status.text = "Paste a link first"; return }
+        val last = FormatWorker.lastSourceOrNull(this, url)
+        if (url.isEmpty() && last == null) { status.text = "Paste a link or pick a local video"; return }
 
         if (Build.VERSION.SDK_INT >= 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -381,10 +427,24 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             val media = data?.getStringExtra(OpenPageActivity.EXTRA_MEDIA).orEmpty()
             if (media.isNotEmpty()) launchJob(media)
         }
+        if (requestCode == REQ_LOCAL_VIDEO && resultCode == Activity.RESULT_OK) {
+            val uri = data?.data ?: return
+            status.text = "Reading local video…"
+            Thread {
+                val f = copyToAppStorage(uri)
+                runOnUiThread {
+                    if (f != null) {
+                        launchJob("", f.absolutePath)
+                    } else {
+                        status.text = "Could not read that video"
+                    }
+                }
+            }.start()
+        }
     }
 
-    private fun launchJob(url: String) {
-        if (url.isEmpty()) { status.text = "Paste a link first"; return }
+    private fun launchJob(url: String, localPath: String? = null) {
+        if (url.isEmpty() && localPath.isNullOrBlank()) { status.text = "Paste a link or pick a video"; return }
 
         val dlQ = dlQuality.selectedItem.toString()
         val exportOn = exportSwitch.isChecked
@@ -403,15 +463,15 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         persistCurrent(custom = false)
 
         val opts = FormatOptions(dlQ, 0, aspect, 0, 3, trimOn, tStart, tEnd, exportOn)
-        lastResultUri = null
-        lastFailUrl = url
-        OpenPageActivity.storeJobUrl(this, url)
-        openPageButton.visibility = View.GONE
-        setBusy(true)
-        val already = DownloadQueue.size(this)
-        status.text = if (already > 0) "Queued (${already})\nStarting..." else "Starting..."
-        hideJobProgress()
-        DownloadService.start(this, url, opts)
+                lastResultUri = null
+                lastFailUrl = url
+                if (url.isNotEmpty()) OpenPageActivity.storeJobUrl(this, url)
+                openPageButton.visibility = View.GONE
+                setBusy(true)
+                val already = DownloadQueue.size(this)
+                status.text = if (already > 0) "Queued (${already})\\nStarting..." else "Starting..."
+                hideJobProgress()
+                DownloadService.start(this, url, opts, localPath.orEmpty())
     }
 
     private fun persistCurrent(custom: Boolean) {
@@ -730,6 +790,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
                 OpenPageActivity.clearJobUrl(this)
                 openPageButton.visibility = View.GONE
                 status.text = prefix + "Saved. Tap to open\n${result.uri}"
+                // Persist last output for re-export reference
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putString(KEY_LAST_OUTPUT, result.uri.toString()).apply()
             } else {
                 lastResultUri = null
                 val cancelled = result.message.equals("Cancelled", ignoreCase = true)
@@ -812,9 +875,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         private const val KEY_CUSTOM_EXPORT_ON = "custom_export_on"
         private const val KEY_CUSTOM_ASPECT_MODE = "custom_aspect_mode"
         private const val KEY_CUSTOM_ASPECT_RATIO = "custom_aspect_ratio"
+        private const val KEY_LAST_OUTPUT = "last_output_uri"
         private const val KEY_BATTERY_ASKED = "battery_opt_asked"
         private const val REQ_POST_NOTIF = 2
         private const val REQ_OPEN_PAGE = 3
+        private const val REQ_LOCAL_VIDEO = 4
         private val JOB_PCT_RE = Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""")
         private const val BAKED_CHANGELOG = """## 1.6.1 (versionCode 28)
 - best = 1080 cap; new 4K option

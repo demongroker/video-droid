@@ -91,7 +91,48 @@ object FormatWorker {
 
     fun isCancelled(): Boolean = cancelRequested.get()
 
-    fun run(context: Context, url: String, opts: FormatOptions, status: (String) -> Unit): FormatResult {
+    private const val PREFS = "videodroid"
+    private const val KEY_LAST_SOURCE = "last_source_path"
+    private const val KEY_LAST_URL = "last_url"
+
+    /** Copy the downloaded source to app storage so re-export can skip yt-dlp. */
+    fun persistSource(context: Context, src: File, url: String) {
+        try {
+            val ext = src.extension.ifEmpty { "mp4" }
+            val keep = File(context.filesDir, "last_source.$ext")
+            src.copyTo(keep, overwrite = true)
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_LAST_SOURCE, keep.absolutePath)
+                .putString(KEY_LAST_URL, url.trim())
+                .apply()
+        } catch (_: Throwable) { }
+    }
+
+    /** Persisted last download for this exact URL, if the file still exists. */
+    fun lastSourceOrNull(context: Context, url: String): File? {
+        return try {
+            val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val lastUrl = p.getString(KEY_LAST_URL, "") ?: ""
+            if (lastUrl != url.trim()) return null
+            val path = p.getString(KEY_LAST_SOURCE, "") ?: return null
+            val f = File(path)
+            if (f.exists() && f.length() > 0) f else null
+        } catch (_: Throwable) { null }
+    }
+
+    /** True when src lives in app storage (persisted re-export source) — never delete it. */
+    private fun isPersistedSource(context: Context, src: File): Boolean {
+        val dir = context.filesDir.absolutePath
+        return src.absolutePath.startsWith(dir + File.separator)
+    }
+
+    fun run(
+        context: Context,
+        url: String,
+        opts: FormatOptions,
+        status: (String) -> Unit,
+        localPath: String? = null,
+    ): FormatResult {
         cancelRequested.set(false)
         JobDiag.beginJob(opts)
         OpenPageActivity.storeJobUrl(context, url)
@@ -109,43 +150,78 @@ object FormatWorker {
 
         return try {
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-            emit("Downloading...")
-            val py = Python.getInstance()
-            val cookies = XCookies.file(context)
-            val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
-            val pollerStop = AtomicBoolean(false)
-            val poller = Thread {
-                var last = ""
-                while (!pollerStop.get() && !cancelRequested.get()) {
-                    try {
-                        val s = py.getModule("dl").callAttr("get_status").toString()
-                        if (s.isNotEmpty() && s != last) {
-                            last = s
-                            emit(s)
+
+            // Source: 1) explicit local file (SAF/gallery), 2) persisted last download
+            // for the same URL (re-export skips yt-dlp), 3) fresh download.
+            val src: File
+            val title: String
+            var width: Int
+            var height: Int
+            var duration: Double
+
+            val picked = if (!localPath.isNullOrBlank()) File(localPath) else null
+            if (picked != null && picked.exists()) {
+                src = picked
+                title = picked.nameWithoutExtension
+                emit("Using local file…")
+                val probe = probeVideo(picked)
+                width = probe.first; height = probe.second; duration = probe.third
+            } else if (picked != null) {
+                return FormatResult(false, "Local file missing")
+            } else {
+                val last = lastSourceOrNull(context, url)
+                if (last != null) {
+                    src = last
+                    title = src.nameWithoutExtension
+                    emit("Using last download (no re-download)…")
+                    val probe = probeVideo(last)
+                    width = probe.first; height = probe.second; duration = probe.third
+                } else {
+                    emit("Downloading...")
+                    val py = Python.getInstance()
+                    val cookies = XCookies.file(context)
+                    val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
+                    val pollerStop = AtomicBoolean(false)
+                    val poller = Thread {
+                        var last = ""
+                        while (!pollerStop.get() && !cancelRequested.get()) {
+                            try {
+                                val s = py.getModule("dl").callAttr("get_status").toString()
+                                if (s.isNotEmpty() && s != last) {
+                                    last = s
+                                    emit(s)
+                                }
+                            } catch (_: Throwable) { }
+                            try {
+                                Thread.sleep(400)
+                            } catch (_: InterruptedException) {
+                                break
+                            }
                         }
-                    } catch (_: Throwable) { }
-                    try {
-                        Thread.sleep(400)
-                    } catch (_: InterruptedException) {
-                        break
                     }
+                    poller.isDaemon = true
+                    poller.start()
+                    val result = try {
+                        py.getModule("dl")
+                            .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
+                            .toString()
+                    } finally {
+                        pollerStop.set(true)
+                        poller.interrupt()
+                    }
+                    if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                    val info = JSONObject(result)
+                    val dl = File(info.getString("path"))
+                    if (!dl.exists()) return FormatResult(false, "Download produced no file")
+                    src = dl
+                    title = info.optString("title", "")
+                    width = info.getInt("width")
+                    height = info.getInt("height")
+                    duration = info.optDouble("duration", 0.0)
+                    emit("Downloaded: ${src.length() / 1024 / 1024} MB")
+                    persistSource(context, src, url)
                 }
             }
-            poller.isDaemon = true
-            poller.start()
-            val result = try {
-                py.getModule("dl")
-                    .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
-                    .toString()
-            } finally {
-                pollerStop.set(true)
-                poller.interrupt()
-            }
-            if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-            val info = JSONObject(result)
-            val src = File(info.getString("path"))
-            if (!src.exists()) return FormatResult(false, "Download produced no file")
-            val title = info.optString("title", "")
 
             val originalAspect = opts.aspect.equals("original", ignoreCase = true)
             // Export off, or Original + trim off: never re-encode.
@@ -154,22 +230,16 @@ object FormatWorker {
                 val ext = src.extension.ifEmpty { "mp4" }
                 val name = fileName(opts, ext, title)
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
-                src.delete()
+                if (!isPersistedSource(context, src)) src.delete()
                 if (uri == null) return FormatResult(false, "Could not save to Downloads")
                 emit("Saved")
                 JobDiag.finishJob()
                 return FormatResult(true, "Saved", uri)
             }
 
-            emit("Downloaded: ${src.length() / 1024 / 1024} MB")
-
-            var width = info.getInt("width")
-            var height = info.getInt("height")
             if (width <= 0 || height <= 0) { width = 1280; height = 720 }
-            var duration = info.optDouble("duration", 0.0)
             if (duration <= 0) duration = probeDuration(src)
-
-            val tStart = if (opts.trimEnabled) FormatOptions.clampTrimSeconds(opts.trimStart) else 0
+            var tStart = if (opts.trimEnabled) FormatOptions.clampTrimSeconds(opts.trimStart) else 0
             val tEnd = if (opts.trimEnabled) FormatOptions.clampTrimSeconds(opts.trimEnd) else 0
             val known = duration > 0
             JobDiag.noteDuration(known, duration)
@@ -219,16 +289,10 @@ object FormatWorker {
                 if (out.exists()) out.delete()
                 emit("Converting (fast)...")
                 val fastArgs = buildFfmpegArgs(input, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec", srcHeight = height)
-                var s = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
+                val s = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
                 JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
-                if (cancelRequested.get()) return s
-                if (!ReturnCode.isSuccess(s.returnCode)) {
-                    if (out.exists()) out.delete()
-                    emit("Converting (fallback)...")
-                    val fbArgs = buildFfmpegArgs(input, out, vf, opts, tStart, tEnd, known, keep, "mpeg4", srcHeight = height)
-                    s = executeConvert(fbArgs, expectedMs, emit, "Converting")
-                    JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
-                }
+                // No mpeg4 fallback: X rejects MPEG-4 Part 2. Fail with a short reason
+                // instead (handled by the caller's keepDownloaded path).
                 return s
             }
 
@@ -262,7 +326,7 @@ object FormatWorker {
                 val name = fileName(opts, ext, title)
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
                 val msg = if (uri != null) {
-                    src.delete()
+                    if (!isPersistedSource(context, src)) src.delete()
                     "Convert failed. Kept original in Downloads. $reason"
                 } else {
                     "Convert failed. Original download kept. $reason"
@@ -282,7 +346,8 @@ object FormatWorker {
             val name = fileName(opts, "mp4", title)
             val uri = saveToDownloads(context, out, name)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
-            src.delete(); out.delete(); if (remux.exists()) remux.delete()
+            if (!isPersistedSource(context, src)) src.delete()
+            out.delete(); if (remux.exists()) remux.delete()
             JobDiag.finishJob()
             FormatResult(true, "Saved", uri)
         } catch (e: Throwable) {
@@ -419,6 +484,27 @@ object FormatWorker {
         }
     }
 
+    /** Video-stream dimensions + duration for local/re-used files (no yt-dlp info). */
+    private fun probeVideo(file: File): Triple<Int, Int, Double> {
+        return try {
+            val mi = FFprobeKit.getMediaInformation(file.absolutePath)?.mediaInformation
+                ?: return Triple(0, 0, 0.0)
+            var w = 0; var h = 0
+            val d = mi.duration?.toDoubleOrNull() ?: 0.0
+            val streams = mi.streams ?: return Triple(0, 0, d)
+            for (s in streams) {
+                if (s.type.equals("video", true)) {
+                    w = (s.width ?: 0).toInt()
+                    h = (s.height ?: 0).toInt()
+                    if (w > 0 && h > 0) break
+                }
+            }
+            Triple(w, h, d)
+        } catch (_: Throwable) {
+            Triple(0, 0, 0.0)
+        }
+    }
+
     /**
      * Trim off: encode entire input (no -ss, no -t).
      * Trim on: -ss start if > 0; -t only when duration is known and > start+end.
@@ -433,7 +519,7 @@ object FormatWorker {
         tEnd: Int,
         knownDuration: Boolean,
         keep: Double,
-        encoder: String = "mpeg4",
+        encoder: String = "h264_mediacodec",
         copy: Boolean = false,
         srcHeight: Int = 720,
     ): Array<String> {
@@ -454,12 +540,10 @@ object FormatWorker {
             args.addAll(listOf("-vf", vf))
         }
         args.addAll(listOf("-c:v", encoder))
-        if (encoder == "mpeg4") {
-            args.addAll(listOf("-q:v", opts.crf.toString()))
-        } else if (encoder == "h264_mediacodec") {
-            val bv = if (srcHeight >= 1080) "30M" else "20M"
-            args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "60M" else "40M"))
-        }
+        // h264_mediacodec only: 16M below 1080p, 24M at >=1080p, bufsize 2x.
+        // No libx264 (not in ffmpeg-kit-full 7.1.5), no mpeg4 (X rejects MPEG-4 Part 2).
+        val bv = if (srcHeight >= 1080) "24M" else "16M"
+        args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "48M" else "32M"))
         // Keep source fps: never pass -r.
         args.addAll(
             listOf(

@@ -38,7 +38,7 @@ class DownloadService : Service() {
             }
             ACTION_START -> {
                 val url = intent.getStringExtra(EXTRA_URL)
-                if (!url.isNullOrBlank()) {
+                if (!url.isNullOrBlank() || intent.getStringExtra(EXTRA_LOCAL_PATH)?.isNotBlank() == true) {
                     val opts = FormatOptions(
                         dlQuality = intent.getStringExtra(EXTRA_DLQ) ?: "720p",
                         exportHeight = intent.getIntExtra(EXTRA_HEIGHT, 1080),
@@ -49,7 +49,14 @@ class DownloadService : Service() {
                         trimEnd = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TEND, 1)),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
                     )
-                    DownloadQueue.enqueue(applicationContext, QueuedJob(url, opts))
+                    DownloadQueue.enqueue(
+                        applicationContext,
+                        QueuedJob(
+                            url = url.orEmpty(),
+                            opts = opts,
+                            localPath = intent.getStringExtra(EXTRA_LOCAL_PATH).orEmpty(),
+                        ),
+                    )
                 }
                 ensurePump()
             }
@@ -99,10 +106,10 @@ class DownloadService : Service() {
                 lastJobLine = "Starting..."
                 publish(lastJobLine)
                 val res = try {
-                    FormatWorker.run(applicationContext, next.url, next.opts) { msg ->
+                    FormatWorker.run(applicationContext, next.url, next.opts, { msg ->
                         lastJobLine = msg
                         publish(msg)
-                    }
+                    }, next.localPath)
                 } catch (t: Throwable) {
                     FormatResult(false, t.message ?: "Failed")
                 }
@@ -210,13 +217,14 @@ class DownloadService : Service() {
         const val EXTRA_TEND = "tend"
         const val EXTRA_EXPORT = "export"
         const val EXTRA_QV = "qv"
+        const val EXTRA_LOCAL_PATH = "localPath"
         private const val CHANNEL_ID = "vd_dl"
         private const val NOTIF_ID = 14
 
         @Volatile
         var listener: Listener? = null
 
-        fun start(ctx: Context, url: String, opts: FormatOptions) {
+        fun start(ctx: Context, url: String, opts: FormatOptions, localPath: String = "") {
             val i = Intent(ctx, DownloadService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_URL, url)
@@ -228,6 +236,7 @@ class DownloadService : Service() {
                 putExtra(EXTRA_TEND, opts.trimEnd)
                 putExtra(EXTRA_EXPORT, opts.exportEnabled)
                 putExtra(EXTRA_QV, opts.crf)
+                putExtra(EXTRA_LOCAL_PATH, localPath)
             }
             if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
