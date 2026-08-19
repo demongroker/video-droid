@@ -490,7 +490,8 @@ object FormatWorker {
         }
         if (!copy) {
             // HW decode for HEVC/H.265: mediacodec feeds h264_mediacodec encoder.
-            args.addAll(listOf("-hwaccel", "mediacodec", "-hwaccel_output_format", "nv12"))
+            // yuv420p (not nv12): NV12 output is not universally playable and breaks crop filters.
+            args.addAll(listOf("-hwaccel", "mediacodec", "-hwaccel_output_format", "yuv420p"))
         }
         args.addAll(listOf("-i", src.absolutePath))
         if (opts.trimEnabled && knownDuration && keep > 1.0 && tEnd >= 0) {
@@ -511,7 +512,7 @@ object FormatWorker {
         // Keep source fps: never pass -r.
         args.addAll(
             listOf(
-                "-pix_fmt", "nv12",
+                "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out.absolutePath,
             )
         )
