@@ -562,9 +562,12 @@ object FormatWorker {
         if (opts.trimEnabled && tStart > 0) {
             args.addAll(listOf("-ss", tStart.toString()))
         }
-        if (!copy && !noHwaccel) {
-            // HW decode for HEVC/H.265: mediacodec feeds h264_mediacodec encoder.
+        if (!copy && encoder == "h264_mediacodec" && !noHwaccel) {
+            // HW decode for HEVC/H.265: mediacodec feeds h264_mediacodec encoder only.
             // yuv420p (not nv12): NV12 output is not universally playable and breaks crop filters.
+            // Structural rule: hwaccel is h264_mediacodec-ONLY. The mpeg4 fallback never gets
+            // -hwaccel mediacodec — hardware decode fails on HEVC streams (rc 69 invalid data),
+            // so mpeg4 always runs pure software decode + software encode.
             args.addAll(listOf("-hwaccel", "mediacodec", "-hwaccel_output_format", "yuv420p"))
         }
         args.addAll(listOf("-i", src.absolutePath))

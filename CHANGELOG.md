@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.28 (versionCode 55)
+
+- **mpeg4 fallback fix**: hwaccel (`-hwaccel mediacodec`) is now structural-only for `h264_mediacodec` encode attempts. The mpeg4 encoder path never receives hwaccel args — pure software decode + mpeg4 software encode works on any source the software decoder can read. Fixes rc 69 invalid-data failure on HEVC files in the mpeg4 fallback path.
+- All 1.6.26/1.6.27 features preserved: H.264-required export download, quality dropdown without best, 4-attempt encode strategy (hwaccel → software decode → software+format → mpeg4 fallback).
+
 ## 1.6.27 (versionCode 54)
 
 - **mpeg4 last-resort fallback**: encode now tries 4 attempts instead of 3. If hwaccel, software decode, and software+format all fail, the final attempt uses the **mpeg4** software encoder (`-c:v mpeg4 -q:v 4`). This decodes whatever FFmpeg's software decoders can handle and always produces a playable MP4 — even for sources that h264_mediacodec rejects (e.g. rc 69 invalid data, empty 261-byte output).
