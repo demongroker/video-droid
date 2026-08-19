@@ -31,17 +31,6 @@ class OpenPageActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_open_page)
 
-        val pageUrl = intent.getStringExtra(EXTRA_URL).orEmpty()
-        if (pageUrl.isEmpty()) {
-            finish()
-            return
-        }
-        pageHost = try {
-            Uri.parse(pageUrl).host
-        } catch (_: Exception) {
-            null
-        }
-
         AdBlock.ensureLoaded(this)
 
         web = findViewById(R.id.pageWebView)
@@ -53,6 +42,19 @@ class OpenPageActivity : AppCompatActivity() {
         adblockToggle.setOnClickListener {
             AdBlock.setEnabled(this, !AdBlock.isEnabled(this))
             paintAdblock()
+        }
+
+        val pageUrl = resolvePageUrl()
+        if (pageUrl.isEmpty()) {
+            sniffStatus.text = "No page URL."
+            sniffDownload.isEnabled = false
+            web.visibility = android.view.View.GONE
+            return
+        }
+        pageHost = try {
+            Uri.parse(pageUrl).host
+        } catch (_: Exception) {
+            null
         }
 
         val cm = CookieManager.getInstance()
@@ -168,9 +170,31 @@ class OpenPageActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    private fun resolvePageUrl(): String {
+        val extra = intent.getStringExtra(EXTRA_URL).orEmpty().trim()
+        if (extra.isNotEmpty()) return extra
+        return loadJobUrl(this)
+    }
+
     companion object {
         const val EXTRA_URL = "page_url"
         const val EXTRA_MEDIA = "media_url"
+        private const val PREFS = "videodroid"
+        private const val KEY_JOB_URL = "last_job_url"
+
+        fun storeJobUrl(context: android.content.Context, url: String) {
+            val u = url.trim()
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                .putString(KEY_JOB_URL, u)
+                .apply()
+        }
+
+        fun loadJobUrl(context: android.content.Context): String {
+            return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .getString(KEY_JOB_URL, "")
+                .orEmpty()
+                .trim()
+        }
 
         private val SNIFF_JS = """
             (function(){

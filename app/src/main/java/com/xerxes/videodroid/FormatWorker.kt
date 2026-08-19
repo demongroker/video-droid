@@ -65,6 +65,7 @@ object FormatWorker {
     fun run(context: Context, url: String, opts: FormatOptions, status: (String) -> Unit): FormatResult {
         cancelRequested.set(false)
         JobDiag.beginJob(opts)
+        OpenPageActivity.storeJobUrl(context, url)
         val emit: (String) -> Unit = { msg ->
             JobDiag.noteStatus(msg)
             status(msg)

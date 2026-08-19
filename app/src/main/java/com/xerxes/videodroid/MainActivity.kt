@@ -138,6 +138,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         trimStart.setText(prefs.getInt(KEY_TRIM_START, 1).toString())
         trimEnd.setText(prefs.getInt(KEY_TRIM_END, 1).toString())
         suppressPersist = false
+        lastFailUrl = OpenPageActivity.loadJobUrl(this).ifEmpty { null }
         applyExportUi(exportSwitch.isChecked)
         applyAspectModeUi()
         applyTrimOnOff(trimSwitch.isChecked)
@@ -342,6 +343,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val opts = FormatOptions(dlQ, 0, aspect, 0, 4, trimOn, tStart, tEnd, exportOn)
         lastResultUri = null
         lastFailUrl = url
+        OpenPageActivity.storeJobUrl(this, url)
         openPageButton.visibility = View.GONE
         setBusy(true)
         val already = DownloadQueue.size(this)
@@ -518,10 +520,15 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     }
 
     private fun openFailedPage() {
-        val url = lastFailUrl ?: urlInput.text.toString().trim()
-        if (url.isEmpty()) return
+        val url = sequenceOf(
+            lastFailUrl.orEmpty(),
+            OpenPageActivity.loadJobUrl(this),
+            urlInput.text.toString().trim(),
+        ).map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
         val i = Intent(this, OpenPageActivity::class.java)
-        i.putExtra(OpenPageActivity.EXTRA_URL, url)
+        if (url.isNotEmpty()) {
+            i.putExtra(OpenPageActivity.EXTRA_URL, url)
+        }
         startActivityForResult(i, REQ_OPEN_PAGE)
     }
 
