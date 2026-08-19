@@ -12,19 +12,13 @@ android {
         applicationId "com.xerxes.videodroid"
         minSdk 24
         targetSdk 34
-        versionCode 4
-        versionName "1.3"
+        versionCode 22
+        versionName "1.5.5"
         ndk {
             abiFilters "arm64-v8a"
         }
         buildConfigField "String", "UPDATER_URL",
-            "\"http://100.105.81.82:8899/videodroid/version\""
-        python {
-            buildPython "/home/adnan/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/bin/python3.11"
-            pip {
-                install "yt-dlp"
-            }
-        }
+            "\"https://api.github.com/repos/demongroker/video-droid/releases/latest\""
     }
 
     signingConfigs {
@@ -50,6 +44,18 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+}
+
+// Chaquopy 16.1 on-device default is 3.8; yt-dlp 2026.7.4 needs >=3.10.
+chaquopy {
+    defaultConfig {
+        version "3.12"
+        buildPython "/home/adnan/.local/share/uv/python/cpython-3.12.8-linux-x86_64-gnu/bin/python3.12"
+        pip {
+            // Chaquopy's pip index stops at 2024.10.22; pin the wheel URL.
+            install "https://files.pythonhosted.org/packages/f9/8a/cd4c9b02c10c563adfe78118310129641900e1cd6de888cfae2452072696/yt_dlp-2026.7.4-py3-none-any.whl"
+        }
     }
 }
 

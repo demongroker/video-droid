@@ -2,6 +2,17 @@
 build/
 local.properties
 videodroid.keystore
+*.jks
+*.keystore
 gradle.properties
 *.iml
 *.apk
+*.aab
+*.dump
+__pycache__/
+*.pyc
+*.pyo
+cookies
+cookies.txt
+*.cookies
+.DS_Store

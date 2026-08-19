@@ -7,10 +7,17 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.Statistics
 import com.chaquo.python.Python
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class FormatResult(val ok: Boolean, val message: String, val uri: Uri? = null)
 
@@ -19,76 +26,307 @@ data class FormatOptions(
     val exportHeight: Int,
     val aspect: String,
     val fps: Int = 30,
-    val crf: Int = 23,
+    val crf: Int = 6,
     val trimEnabled: Boolean = true,
     val trimStart: Int = 5,
     val trimEnd: Int = 3,
+    val exportEnabled: Boolean = true,
 )
 
 object FormatWorker {
+    private val cancelRequested = AtomicBoolean(false)
+
+    fun requestCancel() {
+        cancelRequested.set(true)
+        try {
+            Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
+        } catch (_: Throwable) { }
+        try {
+            FFmpegKit.cancel()
+        } catch (_: Throwable) { }
+    }
+
+    fun isCancelled(): Boolean = cancelRequested.get()
+
     fun run(context: Context, url: String, opts: FormatOptions, status: (String) -> Unit): FormatResult {
+        cancelRequested.set(false)
+        JobDiag.beginJob(opts)
+        val emit: (String) -> Unit = { msg ->
+            JobDiag.noteStatus(msg)
+            status(msg)
+        }
+        try {
+            Python.getInstance().getModule("dl").callAttr("set_cancelled", false)
+        } catch (_: Throwable) { }
+
         val work = File(context.cacheDir, "vaf")
         work.mkdirs()
         work.listFiles()?.forEach { it.delete() }
 
         return try {
-            // 1. download via yt-dlp (bundled Python / Chaquopy) -> returns JSON with path + dims
-            status("Downloading...")
+            if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+            emit("Downloading...")
             val py = Python.getInstance()
             val cookies = XCookies.file(context)
             val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
-            val result = py.getModule("dl")
-                .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
-                .toString()
+            val pollerStop = AtomicBoolean(false)
+            val poller = Thread {
+                var last = ""
+                while (!pollerStop.get() && !cancelRequested.get()) {
+                    try {
+                        val s = py.getModule("dl").callAttr("get_status").toString()
+                        if (s.isNotEmpty() && s != last) {
+                            last = s
+                            emit(s)
+                        }
+                    } catch (_: Throwable) { }
+                    try {
+                        Thread.sleep(400)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }
+            poller.isDaemon = true
+            poller.start()
+            val result = try {
+                py.getModule("dl")
+                    .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
+                    .toString()
+            } finally {
+                pollerStop.set(true)
+                poller.interrupt()
+            }
+            if (cancelRequested.get()) return FormatResult(false, "Cancelled")
             val info = JSONObject(result)
             val src = File(info.getString("path"))
             if (!src.exists()) return FormatResult(false, "Download produced no file")
-            status("Downloaded: ${src.length() / 1024 / 1024} MB")
+
+            val originalAspect = opts.aspect.equals("original", ignoreCase = true)
+            // Export off, or Original + trim off: never re-encode.
+            if (!opts.exportEnabled || (originalAspect && !opts.trimEnabled)) {
+                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                val ext = src.extension.ifEmpty { "mp4" }
+                val name = fileName(opts, ext)
+                val uri = saveToDownloads(context, src, name, mimeForExt(ext))
+                src.delete()
+                if (uri == null) return FormatResult(false, "Could not save to Downloads")
+                emit("Saved")
+                JobDiag.finishJob()
+                return FormatResult(true, "Saved", uri)
+            }
+
+            emit("Downloaded: ${src.length() / 1024 / 1024} MB")
 
             var width = info.getInt("width")
             var height = info.getInt("height")
             if (width <= 0 || height <= 0) { width = 1280; height = 720 }
-            var duration = info.getDouble("duration")
-            if (duration <= 0) duration = 100.0
+            var duration = info.optDouble("duration", 0.0)
+            if (duration <= 0) duration = probeDuration(src)
 
-            // 2. trim + aspect/export filter
-            val tStart = if (opts.trimEnabled) opts.trimStart else 0
-            val tEnd = if (opts.trimEnabled) opts.trimEnd else 0
-            var keep = duration - tStart - tEnd
-            if (keep <= 1) keep = duration
-            val vf = buildFilter(width, height, opts.aspect, opts.exportHeight, opts.fps)
+            val tStart = if (opts.trimEnabled) opts.trimStart.coerceAtLeast(0) else 0
+            val tEnd = if (opts.trimEnabled) opts.trimEnd.coerceAtLeast(0) else 0
+            val known = duration > 0
+            JobDiag.noteDuration(known, duration)
+            val keep = if (known) duration - tStart - tEnd else Double.NaN
+            val vf = if (originalAspect) null else buildFilter(width, height, opts.aspect)
 
-            // 3. ffmpeg
-            status("Converting...")
+            if (cancelRequested.get()) return FormatResult(false, "Cancelled")
             val out = File(work, "out.mp4")
-            val args = arrayOf(
-                "-y", "-v", "error", "-ss", tStart.toString(),
-                "-i", src.absolutePath, "-t", keep.toString(), "-vf", vf,
-                "-c:v", "libx264", "-preset", "fast", "-crf", opts.crf.toString(),
-                "-pix_fmt", "yuv420p", "-r", opts.fps.toString(),
-                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out.absolutePath,
-            )
-            val session = FFmpegKit.executeWithArguments(args)
-            if (!ReturnCode.isSuccess(session.returnCode)) {
-                val tail = (session.output ?: "").takeLast(400)
-                return FormatResult(false, "FFmpeg error: $tail")
+            val expectedMs = when {
+                opts.trimEnabled && known && keep > 1.0 -> keep * 1000.0
+                duration > 0 -> duration * 1000.0
+                else -> 0.0
+            }
+
+            var session: com.arthenica.ffmpegkit.FFmpegSession? = null
+            if (originalAspect && opts.trimEnabled) {
+                emit("Trimming (copy)...")
+                val copyArgs = buildFfmpegArgs(src, out, null, opts, tStart, tEnd, known, keep, copy = true)
+                session = executeConvert(copyArgs, expectedMs, emit, "Trimming")
+                JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+            }
+
+            if (session == null || !ReturnCode.isSuccess(session.returnCode)) {
+                if (out.exists()) out.delete()
+                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                emit("Converting (fast)...")
+                val fastArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec")
+                session = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
+                JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                if (!ReturnCode.isSuccess(session.returnCode)) {
+                    if (out.exists()) out.delete()
+                    emit("Converting (fallback)...")
+                    val fbArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "mpeg4")
+                    session = executeConvert(fbArgs, expectedMs, emit, "Converting")
+                    JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
+                }
+            }
+            if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+            val done = session ?: return FormatResult(false, "FFmpeg produced no output")
+            if (!ReturnCode.isSuccess(done.returnCode)) {
+                val tail = (done.output ?: "").takeLast(400)
+                return FormatResult(false, mapError("FFmpeg error: $tail"))
             }
             if (!out.exists()) return FormatResult(false, "FFmpeg produced no output")
 
-            // 4. save to phone Downloads
-            status("Saving to phone...")
-            val name = "videodroid_${System.currentTimeMillis()}.mp4"
+            emit("Saving to phone...")
+            val name = fileName(opts, "mp4")
             val uri = saveToDownloads(context, out, name)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
             src.delete(); out.delete()
+            JobDiag.finishJob()
             FormatResult(true, "Saved", uri)
         } catch (e: Throwable) {
-            FormatResult(false, e.message ?: e.toString())
+            JobDiag.noteException(e.message ?: e.toString())
+            JobDiag.finishJob()
+            if (cancelRequested.get() || isCancelMessage(e.message)) {
+                FormatResult(false, "Cancelled")
+            } else {
+                FormatResult(false, mapError(e.message ?: e.toString()))
+            }
         }
     }
 
-    fun buildFilter(win: Int, hin: Int, aspect: String, height: Int, fps: Int): String {
-        if (aspect == "original") return "scale=-2:$height,fps=$fps"
+    fun mapError(raw: String): String {
+        val s = raw.lowercase()
+        if (s.contains("cancel")) return "Cancelled"
+        if (s.contains("need x login")) return "Need X login"
+        if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
+            return "No video in this tweet"
+        }
+        if (s.contains("sign in") || s.contains("login") || s.contains("cookie")
+            || s.contains("authentication") || s.contains("private video")
+            || s.contains("confirm you’re not a bot") || s.contains("confirm you're not a bot")
+        ) {
+            return "Need X login"
+        }
+        if (s.contains("unknown host") || s.contains("unable to resolve")
+            || s.contains("network is unreachable") || s.contains("failed to connect")
+            || s.contains("timeout") || s.contains("timed out")
+            || s.contains("no address associated") || s.contains("enotconn")
+            || s.contains("econnrefused") || s.contains("offline")
+            || s.contains("unable to download") && s.contains("http")
+        ) {
+            return "No network"
+        }
+        val cleaned = raw.replace(Regex("(?i)cookie[^\n]*"), "").trim()
+        return cleaned.take(160).ifEmpty { "Download failed" }
+    }
+
+    private fun isCancelMessage(msg: String?): Boolean {
+        val s = msg?.lowercase() ?: return false
+        return s.contains("cancel")
+    }
+
+    /**
+     * Async FFmpeg so StatisticsCallback can update Converting N%.
+     * Percent = stats.time_ms / expectedMs. Unknown duration: elapsed wall time, no fake %.
+     * Throttle ~2% or 500ms. Cancel still uses FFmpegKit.cancel().
+     */
+    private fun executeConvert(
+        args: Array<String>,
+        expectedMs: Double,
+        status: (String) -> Unit,
+        label: String = "Converting",
+    ): com.arthenica.ffmpegkit.FFmpegSession {
+        val lastPct = AtomicInteger(-1)
+        val lastUiMs = AtomicLong(0L)
+        val convertStart = System.currentTimeMillis()
+        val done = CountDownLatch(1)
+        val session = FFmpegKit.executeWithArgumentsAsync(
+            args,
+            { _ -> done.countDown() },
+            null,
+            { stats: Statistics ->
+                if (!cancelRequested.get()) {
+                    val now = System.currentTimeMillis()
+                    val timeMs = stats.time.toDouble()
+                    if (expectedMs > 0) {
+                        val pct = ((timeMs / expectedMs) * 100.0).toInt().coerceIn(0, 99)
+                        if (pct >= lastPct.get() + 2 || now - lastUiMs.get() >= 500) {
+                            lastPct.set(pct)
+                            lastUiMs.set(now)
+                            status("$label $pct%")
+                        }
+                    } else if (now - lastUiMs.get() >= 500) {
+                        lastUiMs.set(now)
+                        val elapsedSec = ((now - convertStart) / 1000L).toInt()
+                        status("$label… ${elapsedSec}s")
+                    }
+                }
+            },
+        )
+        while (!done.await(200, TimeUnit.MILLISECONDS)) {
+            if (cancelRequested.get()) {
+                try { FFmpegKit.cancel() } catch (_: Throwable) { }
+            }
+        }
+        return session
+    }
+
+    /** Probe downloaded file; 0 if unknown. Never invent a duration. */
+    fun probeDuration(file: File): Double {
+        return try {
+            val info = FFprobeKit.getMediaInformation(file.absolutePath)?.mediaInformation
+            val d = info?.duration?.toDoubleOrNull() ?: 0.0
+            if (d > 0) d else 0.0
+        } catch (_: Throwable) {
+            0.0
+        }
+    }
+
+    /**
+     * Trim off: encode entire input (no -ss, no -t).
+     * Trim on: -ss start if > 0; -t only when duration is known and > start+end.
+     * Unknown duration never gets -t (never -t 100).
+     */
+    fun buildFfmpegArgs(
+        src: File,
+        out: File,
+        vf: String?,
+        opts: FormatOptions,
+        tStart: Int,
+        tEnd: Int,
+        knownDuration: Boolean,
+        keep: Double,
+        encoder: String = "mpeg4",
+        copy: Boolean = false,
+    ): Array<String> {
+        val args = ArrayList<String>()
+        args.addAll(listOf("-y", "-v", "error"))
+        if (opts.trimEnabled && tStart > 0) {
+            args.addAll(listOf("-ss", tStart.toString()))
+        }
+        args.addAll(listOf("-i", src.absolutePath))
+        if (opts.trimEnabled && knownDuration && keep > 1.0 && tEnd >= 0) {
+            args.addAll(listOf("-t", keep.toString()))
+        }
+        if (copy) {
+            args.addAll(listOf("-c", "copy", "-movflags", "+faststart", out.absolutePath))
+            return args.toTypedArray()
+        }
+        if (!vf.isNullOrBlank()) {
+            args.addAll(listOf("-vf", vf))
+        }
+        args.addAll(listOf("-c:v", encoder))
+        if (encoder == "mpeg4") {
+            args.addAll(listOf("-q:v", opts.crf.toString()))
+        }
+        // Keep source fps: never pass -r.
+        args.addAll(
+            listOf(
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out.absolutePath,
+            )
+        )
+        return args.toTypedArray()
+    }
+
+    /** Crop/pad only. Even width via -2:ih. No fps filter, no export-height scale. */
+    fun buildFilter(win: Int, hin: Int, aspect: String): String {
+        if (aspect == "original") return "scale=trunc(iw/2)*2:trunc(ih/2)*2"
         var mode = "crop"; var spec = aspect
         if (aspect.startsWith("crop:") || aspect.startsWith("pad:")) {
             mode = aspect.substringBefore(":")
@@ -98,18 +336,29 @@ object FormatWorker {
         val r = ab[0].toFloat() / ab[1].toFloat()
         val sr = win.toFloat() / hin.toFloat()
         return when {
-            mode == "crop" && sr >= r -> "crop=ih*$r:ih:(iw-ih*$r)/2:0,scale=-2:$height,fps=$fps"
-            mode == "crop"          -> "crop=iw:iw/$r:0:(ih-iw/$r)/2,scale=-2:$height,fps=$fps"
-            sr >= r                 -> "pad=iw:iw/$r:0:(iw/$r-ih)/2:black,scale=-2:$height,fps=$fps"
-            else                    -> "pad=ih*$r:ih:(ih*$r-iw)/2:0:black,scale=-2:$height,fps=$fps"
+            mode == "crop" && sr >= r -> "crop=ih*$r:ih:(iw-ih*$r)/2:0,scale=-2:ih"
+            mode == "crop"          -> "crop=iw:iw/$r:0:(ih-iw/$r)/2,scale=-2:ih"
+            sr >= r                 -> "pad=iw:iw/$r:0:(iw/$r-ih)/2:black,scale=-2:ih"
+            else                    -> "pad=ih*$r:ih:(ih*$r-iw)/2:0:black,scale=-2:ih"
         }
     }
 
-    fun saveToDownloads(context: Context, file: File, name: String): Uri? {
+    fun qualityTag(opts: FormatOptions): String {
+        val q = opts.dlQuality.lowercase()
+        if (q == "best") return "best"
+        val digits = q.filter { it.isDigit() }
+        return digits.ifEmpty { q.substringBefore("p").ifEmpty { "best" } }
+    }
+
+    fun fileName(opts: FormatOptions, ext: String): String {
+        return "videodroid_${qualityTag(opts)}_${System.currentTimeMillis()}.$ext"
+    }
+
+    fun saveToDownloads(context: Context, file: File, name: String, mime: String = "video/mp4"): Uri? {
         if (Build.VERSION.SDK_INT >= 29) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/VideoDroid")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
@@ -132,6 +381,16 @@ object FormatWorker {
             file.inputStream().use { ins -> dest.outputStream().use { it.copyFrom(ins) } }
             return Uri.fromFile(dest)
         }
+    }
+
+    private fun mimeForExt(ext: String): String = when (ext.lowercase()) {
+        "mp4", "m4v" -> "video/mp4"
+        "webm" -> "video/webm"
+        "mkv" -> "video/x-matroska"
+        "mov" -> "video/quicktime"
+        "ts", "mts" -> "video/mp2t"
+        "avi" -> "video/x-msvideo"
+        else -> "application/octet-stream"
     }
 
     private fun java.io.OutputStream.copyFrom(input: java.io.InputStream) {
