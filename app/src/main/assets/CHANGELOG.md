@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.17 (versionCode 44)
+
+- Export On shows Fill/Fit, ratio, and auto-trim on the main page (no More). Export Off still hides them and locks Original.
+- More stays Login X, Changelog, Check update, Copy log. Social presets and progress bar unchanged.
+
 ## 1.6.16 (versionCode 43)
 
 - Material compact UI, honest linear progress bar, social presets expand/collapse at the top.
