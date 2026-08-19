@@ -10,6 +10,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.text.Editable
+import android.text.TextWatcher
 import android.provider.Settings
 import android.view.View
 import android.widget.AdapterView
@@ -177,6 +179,15 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         goButton.setOnClickListener { start() }
         cancelButton.setOnClickListener { cancelJob() }
         openPageButton.setOnClickListener { openFailedPage() }
+        urlInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (s == null || s.toString().trim().isEmpty()) {
+                    OpenPageActivity.clearJobUrl(this@MainActivity)
+                }
+            }
+        })
 
         status.setOnClickListener {
             val uri = lastResultUri ?: return@setOnClickListener
@@ -547,6 +558,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             if (result.ok && result.uri != null) {
                 lastResultUri = result.uri
                 lastFailUrl = null
+                OpenPageActivity.clearJobUrl(this)
                 openPageButton.visibility = View.GONE
                 status.text = prefix + "Saved. Tap to open\n${result.uri}"
             } else {

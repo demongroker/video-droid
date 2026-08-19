@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -64,17 +63,22 @@ class OpenPageActivity : AppCompatActivity() {
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.settings.mediaPlaybackRequiresUserGesture = false
-        web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        web.addJavascriptInterface(SniffBridge(), "VideoDroidSniff")
+        web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        web.settings.allowFileAccess = false
+        web.settings.allowContentAccess = false
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                consider(request.url.toString(), request.requestHeaders?.get("Accept"))
+                val next = request.url
+                if (!isHttpOrHttps(next)) return true
+                consider(next.toString(), request.requestHeaders?.get("Accept"))
                 return false
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                val url = request.url.toString()
+                val uri = request.url
+                if (!isHttpOrHttps(uri)) return AdBlock.emptyOk()
+                val url = uri.toString()
                 consider(url, request.requestHeaders?.get("Accept"))
                 if (AdBlock.isEnabled(this@OpenPageActivity) &&
                     AdBlock.shouldBlock(url, pageHost)
@@ -85,9 +89,14 @@ class OpenPageActivity : AppCompatActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                injectSniffer()
                 runOnUiThread { refreshStatus() }
             }
+        }
+        if (!isHttpOrHttps(Uri.parse(pageUrl))) {
+            sniffStatus.text = "No page URL."
+            sniffDownload.isEnabled = false
+            web.visibility = android.view.View.GONE
+            return
         }
         web.loadUrl(pageUrl)
     }
@@ -95,28 +104,6 @@ class OpenPageActivity : AppCompatActivity() {
     private fun paintAdblock() {
         val on = AdBlock.isEnabled(this)
         adblockToggle.text = if (on) "Adblock On" else "Adblock Off"
-    }
-
-    private fun injectSniffer() {
-        web.evaluateJavascript(SNIFF_JS, null)
-    }
-
-    private inner class SniffBridge {
-        @JavascriptInterface
-        fun found(url: String?) {
-            if (url.isNullOrBlank()) return
-            consider(url, null)
-        }
-
-        @JavascriptInterface
-        fun blobHint() {
-            runOnUiThread {
-                if (sniffed == null) {
-                    blobOnly = true
-                    refreshStatus()
-                }
-            }
-        }
     }
 
     private fun refreshStatus() {
@@ -184,8 +171,18 @@ class OpenPageActivity : AppCompatActivity() {
 
         fun storeJobUrl(context: android.content.Context, url: String) {
             val u = url.trim()
+            if (u.isEmpty()) {
+                clearJobUrl(context)
+                return
+            }
             context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
                 .putString(KEY_JOB_URL, u)
+                .apply()
+        }
+
+        fun clearJobUrl(context: android.content.Context) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                .remove(KEY_JOB_URL)
                 .apply()
         }
 
@@ -196,86 +193,11 @@ class OpenPageActivity : AppCompatActivity() {
                 .trim()
         }
 
-        private val SNIFF_JS = """
-            (function(){
-              if (window.__vdSniffInstalled) { try { window.__vdScan(); } catch(e){} return; }
-              window.__vdSniffInstalled = true;
-              function report(u){
-                if (!u || typeof u !== 'string') return;
-                if (u.indexOf('blob:')===0 || u.indexOf('data:')===0) {
-                  try { VideoDroidSniff.blobHint(); } catch(e){}
-                  return;
-                }
-                try { VideoDroidSniff.found(u); } catch(e){}
-              }
-              function scanVideos(){
-                var vs = document.querySelectorAll('video');
-                for (var i=0;i<vs.length;i++){
-                  var v = vs[i];
-                  report(v.currentSrc || v.src);
-                  var srcs = v.querySelectorAll('source');
-                  for (var j=0;j<srcs.length;j++) report(srcs[j].src);
-                }
-              }
-              function scanPerf(){
-                try {
-                  var es = performance.getEntriesByType('resource');
-                  for (var i=0;i<es.length;i++){
-                    var n = es[i].name || '';
-                    if (/m3u8|mp4|mpd|webm|\.ts(\?|$)/i.test(n)) report(n);
-                  }
-                } catch(e){}
-              }
-              window.__vdScan = function(){ scanVideos(); scanPerf(); };
-              try {
-                var desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-                if (desc && desc.set) {
-                  Object.defineProperty(HTMLMediaElement.prototype, 'src', {
-                    configurable: true,
-                    enumerable: desc.enumerable,
-                    get: desc.get,
-                    set: function(v){ report(v); return desc.set.call(this, v); }
-                  });
-                }
-              } catch(e){}
-              try {
-                var so = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
-                if (so && so.set) {
-                  Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
-                    configurable: true,
-                    enumerable: so.enumerable,
-                    get: so.get,
-                    set: function(v){
-                      try { VideoDroidSniff.blobHint(); } catch(e){}
-                      return so.set.call(this, v);
-                    }
-                  });
-                }
-              } catch(e){}
-              try {
-                var po = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function(m,u){
-                  try { if (typeof u === 'string' && /m3u8|mp4|mpd|webm/i.test(u)) report(u); } catch(e){}
-                  return po.apply(this, arguments);
-                };
-              } catch(e){}
-              try {
-                var ofetch = window.fetch;
-                if (ofetch) {
-                  window.fetch = function(input, init){
-                    try {
-                      var u = (typeof input === 'string') ? input : (input && input.url);
-                      if (u && /m3u8|mp4|mpd|webm/i.test(u)) report(u);
-                    } catch(e){}
-                    return ofetch.apply(this, arguments);
-                  };
-                }
-              } catch(e){}
-              scanVideos();
-              scanPerf();
-              setInterval(window.__vdScan, 1500);
-            })();
-        """.trimIndent()
+        fun isHttpOrHttps(uri: Uri?): Boolean {
+            if (uri == null) return false
+            val scheme = uri.scheme?.lowercase() ?: return false
+            return scheme == "https" || scheme == "http"
+        }
 
         fun looksLikeMedia(url: String, accept: String? = null): Boolean {
             val u = url.lowercase()

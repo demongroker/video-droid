@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.10 (versionCode 37)
+
+- Open page WebView: no mixed content, http/https navigation only, JS bridge removed. Keep last-job URL clear on success.
+
 ## 1.6.9 (versionCode 36)
 
 - Updater: fail-closed same-signing-certificate check before install.
