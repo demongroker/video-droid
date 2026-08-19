@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.16 (versionCode 43)
+
+- Material compact UI, honest linear progress bar, social presets expand/collapse at the top.
+- Tighter vertical spacing so more of the one-page menu sits higher (48dp Download target kept).
+
 ## 1.6.15 (versionCode 42)
 
 - README catch-up: current product (export, encode quality, remux, Open page / TLS, queue backup, fail-closed install).

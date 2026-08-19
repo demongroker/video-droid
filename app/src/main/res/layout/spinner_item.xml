@@ -9,7 +9,7 @@
     android:minHeight="48dp"
     android:paddingStart="8dp"
     android:paddingEnd="32dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
     android:singleLine="false"
     android:textSize="16sp" />

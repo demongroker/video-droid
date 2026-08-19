@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.text.Editable
 import android.text.TextWatcher
 import android.provider.Settings
+import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -25,6 +26,10 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.regex.Pattern
@@ -48,7 +53,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private lateinit var goButton: Button
     private lateinit var cancelButton: Button
     private lateinit var openPageButton: Button
+    private lateinit var jobProgress: LinearProgressIndicator
     private lateinit var status: TextView
+    private lateinit var presetsToggle: MaterialButton
+    private lateinit var presetsExpanded: ChipGroup
     private var busy = false
     private var lastResultUri: Uri? = null
     private var pendingStart = false
@@ -76,7 +84,12 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         goButton = findViewById(R.id.goButton)
         cancelButton = findViewById(R.id.cancelButton)
         openPageButton = findViewById(R.id.openPageButton)
+        jobProgress = findViewById(R.id.jobProgress)
         status = findViewById(R.id.status)
+        presetsToggle = findViewById(R.id.presetsToggle)
+        presetsExpanded = findViewById(R.id.presetsExpanded)
+        hideJobProgress()
+        collapsePresets()
 
         findViewById<Button>(R.id.loginXButton).setOnClickListener {
             startActivity(Intent(this, XLoginActivity::class.java))
@@ -88,23 +101,32 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
-        findViewById<Button>(R.id.presetX).setOnClickListener {
+        findViewById<Chip>(R.id.presetX).setOnClickListener {
             applySocialPreset("X", exportOn = true, quality = "best", mode = "Fit", ratio = "Portrait 9:16")
         }
-        findViewById<Button>(R.id.presetTikTok).setOnClickListener {
-            applySocialPreset("TikTok / Shorts / Reels", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+        findViewById<Chip>(R.id.presetTikTok).setOnClickListener {
+            applySocialPreset("TikTok", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
         }
-        findViewById<Button>(R.id.presetYouTube).setOnClickListener {
+        findViewById<Chip>(R.id.presetShorts).setOnClickListener {
+            applySocialPreset("Shorts", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+        }
+        findViewById<Chip>(R.id.presetReels).setOnClickListener {
+            applySocialPreset("Reels", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+        }
+        findViewById<Chip>(R.id.presetYouTube).setOnClickListener {
             applySocialPreset("YouTube", exportOn = true, quality = "best", mode = "Original", ratio = "Portrait 9:16")
         }
-        findViewById<Button>(R.id.presetInstagram).setOnClickListener {
+        findViewById<Chip>(R.id.presetInstagram).setOnClickListener {
             applySocialPreset("Instagram", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 4:5")
         }
-        findViewById<Button>(R.id.presetFacebook).setOnClickListener {
+        findViewById<Chip>(R.id.presetFacebook).setOnClickListener {
             applySocialPreset("Facebook", exportOn = true, quality = "best", mode = "Fit", ratio = "Landscape 16:9")
         }
+        presetsToggle.setOnClickListener { expandPresets() }
+        wirePresetCollapse()
 
         moreToggle.setOnClickListener {
+            collapsePresets()
             val open = moreSection.visibility != View.VISIBLE
             moreSection.visibility = if (open) View.VISIBLE else View.GONE
             moreToggle.text = if (open) "More ▾" else "More ▸"
@@ -173,12 +195,31 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
         aspectRatio.onItemSelectedListener = persistListener
 
-        findViewById<Button>(R.id.recommendedButton).setOnClickListener { applyRecommended() }
-        findViewById<Button>(R.id.myLastButton).setOnClickListener { applyMyLast() }
+        findViewById<Button>(R.id.recommendedButton).setOnClickListener {
+            collapsePresets()
+            applyRecommended()
+        }
+        findViewById<Button>(R.id.myLastButton).setOnClickListener {
+            collapsePresets()
+            applyMyLast()
+        }
 
-        goButton.setOnClickListener { start() }
-        cancelButton.setOnClickListener { cancelJob() }
-        openPageButton.setOnClickListener { openFailedPage() }
+        goButton.setOnClickListener {
+            collapsePresets()
+            start()
+        }
+        cancelButton.setOnClickListener {
+            collapsePresets()
+            cancelJob()
+        }
+        openPageButton.setOnClickListener {
+            collapsePresets()
+            openFailedPage()
+        }
+        urlInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) collapsePresets()
+        }
+        urlInput.setOnClickListener { collapsePresets() }
         urlInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -256,6 +297,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             setBusy(true)
             val wait = DownloadQueue.waiting(this)
             status.text = if (wait > 0) "Queued ($wait)\nWorking..." else "Working..."
+            hideJobProgress()
         }
     }
 
@@ -362,6 +404,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         setBusy(true)
         val already = DownloadQueue.size(this)
         status.text = if (already > 0) "Queued (${already})\nStarting..." else "Starting..."
+        hideJobProgress()
         DownloadService.start(this, url, opts)
     }
 
@@ -469,6 +512,63 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
     }
 
+    private fun expandPresets() {
+        presetsExpanded.visibility = View.VISIBLE
+        presetsToggle.text = "Social presets ▾"
+    }
+
+    private fun collapsePresets() {
+        presetsExpanded.visibility = View.GONE
+        presetsToggle.text = "Social presets"
+    }
+
+    private fun presetsAreExpanded(): Boolean = presetsExpanded.visibility == View.VISIBLE
+
+    private fun isTouchInside(view: View, ev: MotionEvent): Boolean {
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        val x = ev.rawX
+        val y = ev.rawY
+        return x >= loc[0] && x <= loc[0] + view.width && y >= loc[1] && y <= loc[1] + view.height
+    }
+
+    private fun wirePresetCollapse() {
+        val scroll = findViewById<ScrollView>(R.id.mainScroll)
+        val root = findViewById<View>(R.id.mainRoot)
+        val interceptor = View.OnTouchListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_DOWN && presetsAreExpanded()) {
+                if (!isTouchInside(presetsToggle, ev) && !isTouchInside(presetsExpanded, ev)) {
+                    collapsePresets()
+                }
+            }
+            false
+        }
+        scroll.setOnTouchListener(interceptor)
+        root.setOnTouchListener(interceptor)
+        root.setOnClickListener { collapsePresets() }
+        findViewById<Button>(R.id.loginXButton).setOnClickListener {
+            collapsePresets()
+            startActivity(Intent(this, XLoginActivity::class.java))
+        }
+        findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
+            collapsePresets()
+            XCookies.clear(this)
+            status.text = "X login cleared"
+        }
+        findViewById<Button>(R.id.copyLogButton).setOnClickListener {
+            collapsePresets()
+            copyLog()
+        }
+        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
+            collapsePresets()
+            checkUpdateNow()
+        }
+        findViewById<Button>(R.id.changelogButton).setOnClickListener {
+            collapsePresets()
+            showChangelog()
+        }
+    }
+
     private fun showChangelog() {
         val text = loadChangelogText()
         val pad = (16 * resources.displayMetrics.density).toInt()
@@ -506,6 +606,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private fun cancelJob() {
         status.text = "Cancelling..."
+        hideJobProgress()
         openPageButton.visibility = View.GONE
         DownloadService.cancel(this)
     }
@@ -541,6 +642,33 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         goButton.isEnabled = true
         refreshGoButton()
         cancelButton.visibility = if (on) View.VISIBLE else View.GONE
+        if (!on) hideJobProgress()
+    }
+
+    /** Honest bar: real N% only. Never invent 1%. Indeterminate if Downloading/Converting/Trimming with no %. */
+    private fun bindJobProgress(msg: String) {
+        val active = msg.contains("Downloading") ||
+            msg.contains("Converting") ||
+            msg.contains("Trimming")
+        if (!active) {
+            hideJobProgress()
+            return
+        }
+        val pct = JOB_PCT_RE.find(msg)?.groupValues?.get(1)?.toIntOrNull()
+        jobProgress.visibility = View.VISIBLE
+        if (pct != null && pct in 0..100) {
+            if (jobProgress.isIndeterminate) jobProgress.isIndeterminate = false
+            jobProgress.setProgressCompat(pct, true)
+        } else {
+            jobProgress.isIndeterminate = true
+        }
+    }
+
+    private fun hideJobProgress() {
+        if (!::jobProgress.isInitialized) return
+        jobProgress.isIndeterminate = false
+        jobProgress.setProgressCompat(0, false)
+        jobProgress.visibility = View.GONE
     }
 
     private fun openFailedPage() {
@@ -557,7 +685,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     }
 
     override fun onStatus(msg: String) {
-        runOnUiThread { status.text = msg }
+        runOnUiThread {
+            status.text = msg
+            bindJobProgress(msg)
+        }
     }
 
     override fun onFinished(result: FormatResult) {
@@ -580,6 +711,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
                 status.text = prefix + result.message
                 openPageButton.visibility = if (cancelled || remaining > 0) View.GONE else View.VISIBLE
             }
+            hideJobProgress()
         }
     }
 
@@ -646,6 +778,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         private const val KEY_BATTERY_ASKED = "battery_opt_asked"
         private const val REQ_POST_NOTIF = 2
         private const val REQ_OPEN_PAGE = 3
+        private val JOB_PCT_RE = Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""")
         private const val BAKED_CHANGELOG = """## 1.6.1 (versionCode 28)
 - best = 1080 cap; new 4K option
 - Export Off = original only (hide Fill/Fit/trim)
