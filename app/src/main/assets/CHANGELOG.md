@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.5 (versionCode 32)
+
+- TLS / certificate / hostname mismatch / CERTIFICATE_VERIFY_FAILED: short UI — Site TLS bad. Open page. Not No network.
+
 ## 1.6.4 (versionCode 31)
 
 - YouTube (and similar) `Requested format is not available` on **best**: short UI reason — that format is gone; try 1080 or Open page. Not a generic dump.

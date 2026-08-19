@@ -216,6 +216,15 @@ object FormatWorker {
         if (s.contains("requested format is not available") || s.contains("format is not available")) {
             return "That format is gone. Try 1080 or Open page."
         }
+        // TLS before No network. Match ssl / certificate / hostname mismatch / CERTIFICATE_VERIFY_FAILED
+        // explicitly — do not use loose "timeout" (that class stays No network).
+        if (s.contains("certificate_verify_failed")
+            || s.contains("hostname mismatch")
+            || s.contains("ssl")
+            || s.contains("certificate")
+        ) {
+            return "Site TLS bad. Open page."
+        }
         if (s.contains("need x login")) return "Need X login"
         if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
             return "No video in this tweet"
