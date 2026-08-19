@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.5.6 (versionCode 23)
+
+- Aspect spinner: full labels (Original, Fill 16:9, Fit 9:16, …) on the selected line and in the dropdown — wrap/2 lines, no middle ellipsize
+
 ## 1.5.5 (versionCode 22)
 
 - In-app updater: unauthenticated `releases/latest` on demongroker/video-droid

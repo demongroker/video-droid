@@ -86,8 +86,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
 
         fun spinner(s: Spinner, values: Array<String>) {
-            ArrayAdapter(this, android.R.layout.simple_spinner_item, values).also {
-                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            ArrayAdapter(this, R.layout.spinner_item, values).also {
+                it.setDropDownViewResource(R.layout.spinner_dropdown_item)
                 s.adapter = it
             }
         }
