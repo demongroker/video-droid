@@ -91,36 +91,7 @@ object FormatWorker {
 
     fun isCancelled(): Boolean = cancelRequested.get()
 
-    private const val PREFS = "videodroid"
-    private const val KEY_LAST_SOURCE = "last_source_path"
-    private const val KEY_LAST_URL = "last_url"
-
-    /** Copy the downloaded source to app storage so re-export can skip yt-dlp. */
-    fun persistSource(context: Context, src: File, url: String) {
-        try {
-            val ext = src.extension.ifEmpty { "mp4" }
-            val keep = File(context.filesDir, "last_source.$ext")
-            src.copyTo(keep, overwrite = true)
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY_LAST_SOURCE, keep.absolutePath)
-                .putString(KEY_LAST_URL, url.trim())
-                .apply()
-        } catch (_: Throwable) { }
-    }
-
-    /** Persisted last download for this exact URL, if the file still exists. */
-    fun lastSourceOrNull(context: Context, url: String): File? {
-        return try {
-            val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val lastUrl = p.getString(KEY_LAST_URL, "") ?: ""
-            if (lastUrl != url.trim()) return null
-            val path = p.getString(KEY_LAST_SOURCE, "") ?: return null
-            val f = File(path)
-            if (f.exists() && f.length() > 0) f else null
-        } catch (_: Throwable) { null }
-    }
-
-    /** True when src lives in app storage (persisted re-export source) — never delete it. */
+    /** True when src lives in app storage (local picker copy) — never delete it. */
     private fun isPersistedSource(context: Context, src: File): Boolean {
         val dir = context.filesDir.absolutePath
         return src.absolutePath.startsWith(dir + File.separator)
@@ -151,8 +122,7 @@ object FormatWorker {
         return try {
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
 
-            // Source: 1) explicit local file (SAF/gallery), 2) persisted last download
-            // for the same URL (re-export skips yt-dlp), 3) fresh download.
+            // Source: 1) explicit local file (SAF/gallery), 2) fresh download.
             val src: File
             val title: String
             var width: Int
@@ -169,58 +139,48 @@ object FormatWorker {
             } else if (picked != null) {
                 return FormatResult(false, "Local file missing")
             } else {
-                val last = lastSourceOrNull(context, url)
-                if (last != null) {
-                    src = last
-                    title = src.nameWithoutExtension
-                    emit("Using last download (no re-download)…")
-                    val probe = probeVideo(last)
-                    width = probe.first; height = probe.second; duration = probe.third
-                } else {
-                    emit("Downloading...")
-                    val py = Python.getInstance()
-                    val cookies = XCookies.file(context)
-                    val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
-                    val pollerStop = AtomicBoolean(false)
-                    val poller = Thread {
-                        var last = ""
-                        while (!pollerStop.get() && !cancelRequested.get()) {
-                            try {
-                                val s = py.getModule("dl").callAttr("get_status").toString()
-                                if (s.isNotEmpty() && s != last) {
-                                    last = s
-                                    emit(s)
-                                }
-                            } catch (_: Throwable) { }
-                            try {
-                                Thread.sleep(400)
-                            } catch (_: InterruptedException) {
-                                break
+                emit("Downloading...")
+                val py = Python.getInstance()
+                val cookies = XCookies.file(context)
+                val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
+                val pollerStop = AtomicBoolean(false)
+                val poller = Thread {
+                    var last = ""
+                    while (!pollerStop.get() && !cancelRequested.get()) {
+                        try {
+                            val s = py.getModule("dl").callAttr("get_status").toString()
+                            if (s.isNotEmpty() && s != last) {
+                                last = s
+                                emit(s)
                             }
+                        } catch (_: Throwable) { }
+                        try {
+                            Thread.sleep(400)
+                        } catch (_: InterruptedException) {
+                            break
                         }
                     }
-                    poller.isDaemon = true
-                    poller.start()
-                    val result = try {
-                        py.getModule("dl")
-                            .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
-                            .toString()
-                    } finally {
-                        pollerStop.set(true)
-                        poller.interrupt()
-                    }
-                    if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                    val info = JSONObject(result)
-                    val dl = File(info.getString("path"))
-                    if (!dl.exists()) return FormatResult(false, "Download produced no file")
-                    src = dl
-                    title = info.optString("title", "")
-                    width = info.getInt("width")
-                    height = info.getInt("height")
-                    duration = info.optDouble("duration", 0.0)
-                    emit("Downloaded: ${src.length() / 1024 / 1024} MB")
-                    persistSource(context, src, url)
                 }
+                poller.isDaemon = true
+                poller.start()
+                val result = try {
+                    py.getModule("dl")
+                        .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
+                        .toString()
+                } finally {
+                    pollerStop.set(true)
+                    poller.interrupt()
+                }
+                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
+                val info = JSONObject(result)
+                val dl = File(info.getString("path"))
+                if (!dl.exists()) return FormatResult(false, "Download produced no file")
+                src = dl
+                title = info.optString("title", "")
+                width = info.getInt("width")
+                height = info.getInt("height")
+                duration = info.optDouble("duration", 0.0)
+                emit("Downloaded: ${src.length() / 1024 / 1024} MB")
             }
 
             val originalAspect = opts.aspect.equals("original", ignoreCase = true)

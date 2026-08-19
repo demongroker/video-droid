@@ -393,8 +393,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private fun start() {
         val url = urlInput.text.toString().trim()
-        val last = FormatWorker.lastSourceOrNull(this, url)
-        if (url.isEmpty() && last == null) { status.text = "Paste a link or pick a local video"; return }
+        if (url.isEmpty()) { status.text = "Paste a link or pick a local video"; return }
 
         if (Build.VERSION.SDK_INT >= 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
