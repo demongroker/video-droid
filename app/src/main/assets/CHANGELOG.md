@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.2 (versionCode 29)
+
+- Honest download status when size is unknown (HLS): show `Downloading…` / bytes, never a fake stuck 1%
+
 ## 1.6.1 (versionCode 28)
 
 - **best** is 1080-capped (`bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b`). Separate **4K** option.

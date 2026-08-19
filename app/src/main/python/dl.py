@@ -75,32 +75,65 @@ def _emit(text):
         pass
 
 
+def _human_bytes(n):
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return ""
+    if n < 0:
+        return ""
+    if n < 1024:
+        return "%d B" % n
+    if n < 1024 * 1024:
+        return "%d KB" % (n // 1024)
+    if n < 1024 * 1024 * 1024:
+        mb = n / (1024.0 * 1024.0)
+        if mb >= 10:
+            return "%d MB" % int(mb)
+        return "%.1f MB" % mb
+    return "%.2f GB" % (n / (1024.0 * 1024.0 * 1024.0))
+
+
+def _hook_status_line(d):
+    """Honest status. Never a numeric % unless total_bytes or estimate is known."""
+    downloaded = d.get("downloaded_bytes") or 0
+    try:
+        downloaded = int(downloaded)
+    except (TypeError, ValueError):
+        downloaded = 0
+    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+    try:
+        total = int(total)
+    except (TypeError, ValueError):
+        total = 0
+    if total > 0:
+        pct = int(downloaded * 100.0 / total)
+        pct = max(0, min(100, pct))
+        return "Downloading %d%%" % pct, pct
+    human = _human_bytes(downloaded)
+    if human and downloaded > 0:
+        return "Downloading %s" % human, None
+    return "Downloading…", None
+
+
 def _hook(d):
     global _last_pct, _last_t
     _check_cancel()
     if d.get("status") != "downloading":
         return
-    downloaded = d.get("downloaded_bytes") or 0
-    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-    pct = None
-    if total > 0:
-        pct = int(downloaded * 100.0 / total)
-    else:
-        raw = d.get("_percent_str")
-        if raw:
-            try:
-                pct = int(float(str(raw).replace("%", "").strip()))
-            except (TypeError, ValueError):
-                pct = None
-    if pct is None:
-        return
-    pct = max(0, min(100, pct))
+    text, pct = _hook_status_line(d)
     now = time.monotonic()
-    if pct < _last_pct + 2 and (now - _last_t) < 0.5 and pct < 100:
+    if pct is not None:
+        if pct < _last_pct + 2 and (now - _last_t) < 0.5 and pct < 100:
+            return
+        _last_pct = pct
+        _last_t = now
+        _emit(text)
         return
-    _last_pct = pct
+    if (now - _last_t) < 0.5 and _last_status.startswith("Downloading"):
+        return
     _last_t = now
-    _emit("Downloading %d%%" % pct)
+    _emit(text)
 
 
 def _twitter_status_id(url):
