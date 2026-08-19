@@ -3,7 +3,7 @@
 Phone-only Android video downloader. Paste or share a link, pick quality, tap
 Download. yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
-Current release: **1.6.16** (versionCode 43).
+Current release: **1.6.18** (versionCode 45).
 
 ## How to use
 

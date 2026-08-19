@@ -150,15 +150,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         spinner(aspectRatio, ratios)
 
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val savedQ = prefs.getString(KEY_QUALITY, "720p") ?: "720p"
-        val qi = qualities.indexOf(savedQ).let { if (it >= 0) it else 2 }
+        val savedQ = prefs.getString(KEY_QUALITY, "best") ?: "best"
         val savedMode = prefs.getString(KEY_ASPECT_MODE, "Original") ?: "Original"
         val savedRatio = prefs.getString(KEY_ASPECT_RATIO, "Portrait 9:16") ?: "Portrait 9:16"
         suppressPersist = true
-        dlQuality.setSelection(qi)
+        selectValue(dlQuality, savedQ, "best")
         exportSwitch.isChecked = prefs.getBoolean(KEY_EXPORT_ON, true)
-        selectValue(aspectMode, savedMode)
-        selectValue(aspectRatio, savedRatio)
+        selectValue(aspectMode, savedMode, "Original")
+        selectValue(aspectRatio, savedRatio, "Portrait 9:16")
         trimStart.setText(prefs.getInt(KEY_TRIM_START, 1).toString())
         trimEnd.setText(prefs.getInt(KEY_TRIM_END, 1).toString())
         suppressPersist = false
@@ -481,10 +480,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val p = getSharedPreferences(PREFS, MODE_PRIVATE)
         val q = p.getString(KEY_CUSTOM_QUALITY, null) ?: return
         suppressPersist = true
-        selectValue(dlQuality, q)
+        selectValue(dlQuality, q, "best")
         exportSwitch.isChecked = p.getBoolean(KEY_CUSTOM_EXPORT_ON, exportSwitch.isChecked)
-        selectValue(aspectMode, p.getString(KEY_CUSTOM_ASPECT_MODE, aspectMode.selectedItem?.toString() ?: "Original") ?: "Original")
-        selectValue(aspectRatio, p.getString(KEY_CUSTOM_ASPECT_RATIO, aspectRatio.selectedItem?.toString() ?: "Portrait 9:16") ?: "Portrait 9:16")
+        selectValue(aspectMode, p.getString(KEY_CUSTOM_ASPECT_MODE, "Original") ?: "Original", "Original")
+        selectValue(aspectRatio, p.getString(KEY_CUSTOM_ASPECT_RATIO, "Portrait 9:16") ?: "Portrait 9:16", "Portrait 9:16")
         suppressPersist = false
         persistCurrent(custom = false)
         applyExportUi(exportSwitch.isChecked)
@@ -594,10 +593,17 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
     }
 
-    private fun selectValue(s: Spinner, value: String) {
+    private fun selectValue(s: Spinner, value: String, fallback: String? = null) {
         val adapter = s.adapter ?: return
         for (i in 0 until adapter.count) {
             if (adapter.getItem(i).toString() == value) {
+                s.setSelection(i)
+                return
+            }
+        }
+        val fb = fallback ?: return
+        for (i in 0 until adapter.count) {
+            if (adapter.getItem(i).toString() == fb) {
                 s.setSelection(i)
                 return
             }

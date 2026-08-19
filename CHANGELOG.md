@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.18 (versionCode 45)
+
+- MIT LICENSE at repo root.
+- Unknown or missing saved quality / aspect / trim-related spinner values fall back to Recommended (best / Original) instead of crashing or leaving a blank selection.
+
 ## 1.6.17 (versionCode 44)
 
 - Export On shows Fill/Fit, ratio, and auto-trim on the main page (no More). Export Off still hides them and locks Original.
