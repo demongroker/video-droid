@@ -7,6 +7,7 @@ trim + aspect filter without a separate ffprobe pass.
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -52,12 +53,89 @@ def _check_cancel():
         raise _Cancelled("Cancelled")
 
 
+class _CancelAwareResponse:
+    """Honor _cancelled between / during body reads after urlopen returns."""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    def read(self, amt=None):
+        _check_cancel()
+        if amt is None:
+            chunks = []
+            while True:
+                _check_cancel()
+                part = self._resp.read(64 * 1024)
+                if not part:
+                    break
+                chunks.append(part)
+            _check_cancel()
+            return b"".join(chunks)
+        data = self._resp.read(amt)
+        _check_cancel()
+        return data
+
+    def readline(self, *args, **kwargs):
+        _check_cancel()
+        data = self._resp.readline(*args, **kwargs)
+        _check_cancel()
+        return data
+
+    def close(self):
+        return self._resp.close()
+
+    def __enter__(self):
+        self._resp.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._resp.__exit__(*exc)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
+
+    def __getattr__(self, name):
+        return getattr(self._resp, name)
+
+
+def _urlopen_cancellable(opener, *args, **kwargs):
+    """Run urlopen off-thread so Cancel raises without waiting the full socket hang.
+
+    In-flight socket still ends at socket_timeout; extract_info / GraphQL abort promptly.
+    """
+    _check_cancel()
+    box = {"resp": None, "err": None}
+
+    def run():
+        try:
+            box["resp"] = opener(*args, **kwargs)
+        except Exception as e:
+            box["err"] = e
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    while t.is_alive():
+        t.join(0.2)
+        if _cancelled:
+            raise _Cancelled("Cancelled")
+    if box["err"] is not None:
+        _check_cancel()
+        raise box["err"]
+    _check_cancel()
+    return _CancelAwareResponse(box["resp"])
+
+
 class _AbortableYDL(yt_dlp.YoutubeDL):
     """urlopen is used for extract_info HTTP, not only progress_hooks."""
 
     def urlopen(self, req):
-        _check_cancel()
-        return super().urlopen(req)
+        return _urlopen_cancellable(super().urlopen, req)
 
 
 def _emit(text):
@@ -164,8 +242,10 @@ def _http_json(url, timeout=12):
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8", "replace"))
+    with _urlopen_cancellable(urllib.request.urlopen, req, timeout=timeout) as resp:
+        raw = resp.read()
+        _check_cancel()
+        return json.loads(raw.decode("utf-8", "replace"))
 
 
 def _pick_twitter_mp4(media_item, quality):

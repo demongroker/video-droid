@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.3 (versionCode 30)
+
+- Cancel aborts extract_info / urlopen / X GraphQL promptly (not only download hooks). Socket timeout remains the hang upper bound.
+
 ## 1.6.2 (versionCode 29)
 
 - Honest download status when size is unknown (HLS): show `Downloading…` / bytes, never a fake stuck 1%
