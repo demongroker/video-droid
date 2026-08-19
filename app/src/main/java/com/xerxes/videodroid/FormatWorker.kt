@@ -165,7 +165,7 @@ object FormatWorker {
                 poller.start()
                 val result = try {
                     py.getModule("dl")
-                        .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath)
+                        .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath, opts.exportEnabled)
                         .toString()
                 } finally {
                     pollerStop.set(true)

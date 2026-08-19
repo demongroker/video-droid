@@ -48,6 +48,10 @@ class NoVideoInTweet(Exception):
     pass
 
 
+class HevcOnlyError(Exception):
+    """Export path: only H.264 (avc1) is acceptable; source has none."""
+
+
 def _check_cancel():
     if _cancelled:
         raise _Cancelled("Cancelled")
@@ -396,18 +400,22 @@ def _classify_twitter_error(err, had_cookies):
     raise err
 
 
-def download(url, quality, outdir, filename="source", cookiefile=None, progress=None):
-    # Muxed `best` is often missing on android/ios clients; always allow adaptive merge.
-    # X preset / Recommended `best`: prefer H.264 (avc1) sources. HEVC sources can
-    # decode to 0 frames under mediacodec hwaccel on some phones (1.6.23 empty-output
-    # bug) and always take the slow re-encode path; AVC first, then any codec fallback.
-    fmt = {
-        "best": "bv*[vcodec^=avc1][height<=1080]+ba/b[height<=1080]/b",
-        "4K": "bv*[height<=2160]+ba/b",
-        "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
-        "720p": "bv*[height<=720]+ba/b[height<=720]/bv*[height<=720]/b",
-        "480p": "bv*[height<=480]+ba/b[height<=480]/bv*[height<=480]/b",
-    }.get(quality, "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b")
+def download(url, quality, outdir, filename="source", cookiefile=None,
+             export_enabled=False, progress=None):
+    if export_enabled:
+        # Export ON: H.264-REQUIRED, no any-codec fallback. The phone's ffmpeg
+        # build cannot decode HEVC at all (rc=69 invalid data even in software),
+        # so never download HEVC here — fail fast instead (1.6.25).
+        fmt = "bv*[vcodec^=avc1][height<=1080]+ba/bv*[vcodec^=avc1][height<=1080]"
+    else:
+        # Export OFF: presets unchanged, may grab HEVC (no convert needed).
+        fmt = {
+            "best": "bv*[vcodec^=avc1][height<=1080]+ba/b[height<=1080]/b",
+            "4K": "bv*[height<=2160]+ba/b",
+            "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
+            "720p": "bv*[height<=720]+ba/b[height<=720]/bv*[height<=720]/b",
+            "480p": "bv*[height<=480]+ba/b[height<=480]/bv*[height<=480]/b",
+        }.get(quality, "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b")
 
     global _progress_cb, _last_status, _last_pct, _last_t
     _progress_cb = progress
@@ -460,6 +468,10 @@ def download(url, quality, outdir, filename="source", cookiefile=None, progress=
     except Exception as e:
         low = str(e).lower()
         if "format is not available" in low:
+            if export_enabled:
+                raise HevcOnlyError(
+                    "This video is HEVC-only. Cannot convert for %s on this phone. Try another source." % quality
+                )
             try:
                 info = _extract("best*/bv*+ba/b")
             except (_Cancelled, NeedXLogin, NoVideoInTweet):

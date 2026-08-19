@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.25 (versionCode 52)
+
+- **Export H.264-REQUIRED**: Export downloads now use AVC-only format (`bv*[vcodec^=avc1][height<=1080]+ba/...`) with **no any-codec fallback**. If the video is HEVC-only, the download fails fast with a clear message instead of grabbing 676 MB of undecodable HEVC. Export-OFF and 1080/720/480 presets unchanged.
+
 ## 1.6.21 (versionCode 48)
 
 - Fix 1.6.20 regression: convert never started after download. Removed re-export feature (persistSource/lastSourceOrNull) which caused the encode path to stall. Local video picker and H.264-only encode unaffected.
