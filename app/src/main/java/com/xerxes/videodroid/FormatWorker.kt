@@ -245,17 +245,6 @@ object FormatWorker {
                 return true
             }
 
-            fun encodePadCrop(input: File): com.arthenica.ffmpegkit.FFmpegSession {
-                if (out.exists()) out.delete()
-                emit("Converting (fast)...")
-                val fastArgs = buildFfmpegArgs(input, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec", srcHeight = height)
-                val s = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
-                JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
-                // No mpeg4 fallback: X rejects MPEG-4 Part 2. Fail with a short reason
-                // instead (handled by the caller's keepDownloaded path).
-                return s
-            }
-
             var session: com.arthenica.ffmpegkit.FFmpegSession? = null
             if (originalAspect && opts.trimEnabled) {
                 emit("Trimming (copy)...")
@@ -269,13 +258,59 @@ object FormatWorker {
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 if (!isCleanMp4(src)) remuxSource()
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                session = encodePadCrop(encodeSrc)
-                if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                if (!ReturnCode.isSuccess(session.returnCode) && isInvalidData(session) && encodeSrc === src) {
+
+                // One encode attempt; returns null on any failure. Critically, an
+                // rc:0 with an empty/header-only output (< 1024 bytes, e.g. the
+                // 261-byte HEVC hwaccel file) is treated as FAILURE, never success.
+                fun tryEncode(
+                    input: File,
+                    useHwaccel: Boolean,
+                    vfOverride: String?,
+                ): com.arthenica.ffmpegkit.FFmpegSession? {
+                    if (cancelRequested.get()) return null
+                    if (out.exists()) out.delete()
+                    emit("Converting (fast)...")
+                    val filter = vfOverride ?: vf
+                    val args = buildFfmpegArgs(
+                        input, out, filter, opts, tStart, tEnd, known, keep,
+                        "h264_mediacodec", srcHeight = height, noHwaccel = !useHwaccel,
+                    )
+                    val s = executeConvert(args, expectedMs, emit, "Converting (fast)")
+                    JobDiag.noteFfmpeg(s.returnCode?.toString() ?: "null", s.output)
+                    if (cancelRequested.get()) return null
+                    val produced = out.exists() && out.length() >= 1024
+                    if (!ReturnCode.isSuccess(s.returnCode) || !produced) {
+                        JobDiag.noteFfmpeg(
+                            "encode-failed",
+                            "rc=${s.returnCode?.value ?: "?"} bytes=${if (out.exists()) out.length() else 0} hwaccel=$useHwaccel",
+                        )
+                        if (out.exists()) out.delete()
+                        return null
+                    }
+                    return s
+                }
+
+                // Attempt 1: hardware decode (mediacodec) + h264_mediacodec encode.
+                session = tryEncode(encodeSrc, true, null)
+                // Original invalid-data remedy: remux the source (e.g. webm→mp4) and retry.
+                if (session == null && encodeSrc === src) {
                     if (remuxSource()) {
                         if (cancelRequested.get()) return FormatResult(false, "Cancelled")
-                        session = encodePadCrop(encodeSrc)
+                        session = tryEncode(encodeSrc, true, null)
                     }
+                }
+                // Attempt 2: software decode (no hwaccel) + h264_mediacodec encode.
+                // Some HEVC sources fail to produce frames under mediacodec hwaccel
+                // on certain devices; ffmpeg's software decoder still handles them.
+                if (session == null && !cancelRequested.get()) {
+                    session = tryEncode(encodeSrc, false, null)
+                }
+                // Attempt 3: software decode + force pixel conversion via -vf format=yuv420p
+                // appended to the chain, in case the crop/pad filter output format
+                // does not match what h264_mediacodec accepts.
+                if (session == null && !cancelRequested.get()) {
+                    val vfWithFormat = if (vf.isNullOrBlank()) "format=yuv420p" else "$vf,format=yuv420p"
+                    session = tryEncode(encodeSrc, false, vfWithFormat)
                 }
             }
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
@@ -294,6 +329,9 @@ object FormatWorker {
                 emit(msg)
                 JobDiag.finishJob()
                 return FormatResult(false, msg, uri)
+            }
+            if (session == null) {
+                return keepDownloaded("Could not decode this video on this phone. Try quality 1080 (H.264) instead of best (HEVC).")
             }
             val done = session ?: return keepDownloaded("FFmpeg produced no output")
             if (!ReturnCode.isSuccess(done.returnCode)) {
@@ -383,7 +421,6 @@ object FormatWorker {
     }
 
     /**
-     * Async FFmpeg so StatisticsCallback can update Converting N%.
      * Percent = stats.time_ms / expectedMs. Unknown duration: elapsed wall time, no fake %.
      * Throttle ~2% or 500ms. Cancel uses FFmpegKit.cancel(sessionId) for this job only.
      */
@@ -482,13 +519,14 @@ object FormatWorker {
         encoder: String = "h264_mediacodec",
         copy: Boolean = false,
         srcHeight: Int = 720,
+        noHwaccel: Boolean = false,
     ): Array<String> {
         val args = ArrayList<String>()
         args.addAll(listOf("-y", "-v", "error"))
         if (opts.trimEnabled && tStart > 0) {
             args.addAll(listOf("-ss", tStart.toString()))
         }
-        if (!copy) {
+        if (!copy && !noHwaccel) {
             // HW decode for HEVC/H.265: mediacodec feeds h264_mediacodec encoder.
             // yuv420p (not nv12): NV12 output is not universally playable and breaks crop filters.
             args.addAll(listOf("-hwaccel", "mediacodec", "-hwaccel_output_format", "yuv420p"))

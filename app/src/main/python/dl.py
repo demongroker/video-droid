@@ -398,8 +398,11 @@ def _classify_twitter_error(err, had_cookies):
 
 def download(url, quality, outdir, filename="source", cookiefile=None, progress=None):
     # Muxed `best` is often missing on android/ios clients; always allow adaptive merge.
+    # X preset / Recommended `best`: prefer H.264 (avc1) sources. HEVC sources can
+    # decode to 0 frames under mediacodec hwaccel on some phones (1.6.23 empty-output
+    # bug) and always take the slow re-encode path; AVC first, then any codec fallback.
     fmt = {
-        "best": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
+        "best": "bv*[vcodec^=avc1][height<=1080]+ba/b[height<=1080]/b",
         "4K": "bv*[height<=2160]+ba/b",
         "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*[height<=1080]/b",
         "720p": "bv*[height<=720]+ba/b[height<=720]/bv*[height<=720]/b",

@@ -2,6 +2,11 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.24 (versionCode 51)
+
+- Fix convert producing an empty 261-byte file with rc:0 on HEVC sources (hardware decode emitted 0 frames). The encode now **validates the output** (≥1024 bytes) and, on empty/failed output, retries in order: ① hardware decode, ② software decode (no hwaccel) + h264_mediacodec, ③ software decode + `-vf format=yuv420p`. If all attempts fail, the job fails with a clear reason ("Could not decode this video on this phone. Try quality 1080 (H.264) instead of best (HEVC).") and keeps the original download — never a fake success.
+- Recommended `best` and the X preset now **prefer H.264 (avc1) sources** (`bv*[vcodec^=avc1][height<=1080]+ba/...`) so HEVC decode problems are avoided at download time. 1080/720/480 presets unchanged.
+
 ## 1.6.22 (versionCode 49)
 
 - Fix HEVC/H.265 input: encode now uses **hardware decode** (`-hwaccel mediacodec -hwaccel_output_format nv12`) before the input file, so h264_mediacodec no longer fails with "Invalid data found when processing input" on H.265 downloads. Encode path outputs NV12 (`-pix_fmt nv12`) for the MediaCodec encoder. Copy/remux path untouched, still pure stream copy.
