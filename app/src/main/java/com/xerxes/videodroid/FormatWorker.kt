@@ -371,11 +371,18 @@ object FormatWorker {
         val ab = spec.split(":")
         val r = ab[0].toFloat() / ab[1].toFloat()
         val sr = win.toFloat() / hin.toFloat()
+        val num = ab[0].trim()
+        val den = ab[1].trim()
+        // Fit: pad W/H from bitstream iw/ih (not yt-dlp metadata). max() so pad
+        // is never smaller than the current frame; ceil to even. Do not pick a
+        // Kotlin branch — swapped/rotated metadata vs file blew up pad:3:4 @ 720p
+        // (e.g. pad=ih*3/4:ih → 540x720 on a 1280x720 frame).
+        val padVf =
+            "pad=ceil(max(iw\\,ih*$num/$den)/2)*2:ceil(max(ih\\,iw*$den/$num)/2)*2:(ow-iw)/2:(oh-ih)/2:black"
         return when {
             mode == "crop" && sr >= r -> "crop=ih*$r:ih:(iw-ih*$r)/2:0,scale=-2:ih"
             mode == "crop"          -> "crop=iw:iw/$r:0:(ih-iw/$r)/2,scale=-2:ih"
-            sr >= r                 -> "pad=iw:iw/$r:0:(iw/$r-ih)/2:black,scale=-2:ih"
-            else                    -> "pad=ih*$r:ih:(ih*$r-iw)/2:0:black,scale=-2:ih"
+            else                    -> padVf
         }
     }
 

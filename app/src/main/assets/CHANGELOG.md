@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.6 (versionCode 33)
+
+- Fit pad never smaller than frame (3:4 720p)
+
 ## 1.6.5 (versionCode 32)
 
 - TLS / certificate / hostname mismatch / CERTIFICATE_VERIFY_FAILED: short UI — Site TLS bad. Open page. Not No network.
