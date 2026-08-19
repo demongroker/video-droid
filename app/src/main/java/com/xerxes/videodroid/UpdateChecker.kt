@@ -18,57 +18,107 @@ import java.net.URL
 /**
  * Non-blocking update checker. No GitHub token. Fail closed.
  *
- * Fetches BuildConfig.UPDATER_URL (GitHub releases/latest), parses tag_name and the first
- * .apk asset browser_download_url, compares to versionName. Download → cache + progress,
- * then install via FileProvider / REQUEST_INSTALL_PACKAGES. Never opens a browser.
+ * GitHub releases/latest first; on non-200 try Tailscale :8899/videodroid/version
+ * (tag_name + html_url apk). User-initiated Check update surfaces HTTP errors.
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
+    private const val TAILSCALE_VERSION =
+        "http://100.105.81.82:8899/videodroid/version"
 
     private data class ReleaseInfo(val tag: String, val apkUrl: String)
+    private data class FetchOutcome(val info: ReleaseInfo?, val error: String?)
 
-    fun check(activity: Activity, installedVersion: String) {
-        val info = fetchLatest() ?: return
+    fun check(activity: Activity, installedVersion: String, userInitiated: Boolean = false) {
+        val outcome = fetchLatest()
+        val info = outcome.info
+        if (info == null) {
+            if (userInitiated) {
+                report(activity, outcome.error ?: "Update check failed")
+            }
+            return
+        }
         val latestVersion = info.tag.trim().removePrefix("v").removePrefix("V")
-        if (latestVersion.isEmpty()) return
-        if (!isNewer(latestVersion, installedVersion)) return
+        if (latestVersion.isEmpty()) {
+            if (userInitiated) report(activity, "Update check: empty tag_name")
+            return
+        }
+        if (!isNewer(latestVersion, installedVersion)) {
+            if (userInitiated) report(activity, "Up to date ($installedVersion)")
+            return
+        }
         showDialog(activity, latestVersion, info.apkUrl)
     }
 
-    private fun fetchLatest(): ReleaseInfo? {
+    private fun report(activity: Activity, msg: String) {
+        activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+            Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+            if (activity is MainActivity) activity.showUpdateStatus(msg)
+        }
+    }
+
+    private fun fetchLatest(): FetchOutcome {
+        val gh = fetchGithub()
+        if (gh.info != null) return gh
+        val ts = fetchTailscale()
+        if (ts.info != null) return ts
+        val err = listOfNotNull(gh.error, ts.error).joinToString(" · ")
+        return FetchOutcome(null, err.ifBlank { "Update check failed" })
+    }
+
+    private fun fetchGithub(): FetchOutcome {
+        return fetchJson(BuildConfig.UPDATER_URL, github = true)
+    }
+
+    private fun fetchTailscale(): FetchOutcome {
+        return fetchJson(TAILSCALE_VERSION, github = false)
+    }
+
+    private fun fetchJson(url: String, github: Boolean): FetchOutcome {
+        val label = if (github) "GitHub" else "Tailscale :8899"
         return try {
-            val conn = URL(BuildConfig.UPDATER_URL).openConnection() as HttpURLConnection
+            val conn = URL(url).openConnection() as HttpURLConnection
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 8000
             conn.readTimeout = 8000
             conn.setRequestProperty("User-Agent", "VideoDroid")
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            if (conn.responseCode != 200) {
-                Log.w(TAG, "Update check: HTTP ${conn.responseCode}")
+            if (github) conn.setRequestProperty("Accept", "application/vnd.github+json")
+            val code = conn.responseCode
+            if (code != 200) {
+                Log.w(TAG, "$label update check: HTTP $code")
                 conn.disconnect()
-                return null
+                return FetchOutcome(null, "$label HTTP $code")
             }
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
             val json = JSONObject(body)
-            val tag = json.optString("tag_name").ifBlank { return null }
-            val assets = json.optJSONArray("assets") ?: return null
-            var apkUrl: String? = null
-            for (i in 0 until assets.length()) {
-                val a = assets.optJSONObject(i) ?: continue
-                val name = a.optString("name")
-                val url = a.optString("browser_download_url")
-                if (name.endsWith(".apk", ignoreCase = true) && url.startsWith("https://")) {
-                    apkUrl = url
-                    break
-                }
+            val tag = json.optString("tag_name")
+            if (tag.isBlank()) return FetchOutcome(null, "$label: missing tag_name")
+            val apkUrl = if (github) firstGithubApk(json) else json.optString("html_url")
+            if (apkUrl.isNullOrBlank() ||
+                !(apkUrl.startsWith("https://") || apkUrl.startsWith("http://"))
+            ) {
+                return FetchOutcome(null, "$label: no apk url")
             }
-            val url = apkUrl ?: return null
-            ReleaseInfo(tag, url)
+            FetchOutcome(ReleaseInfo(tag, apkUrl), null)
         } catch (e: Throwable) {
-            Log.w(TAG, "Update check failed", e)
-            null
+            Log.w(TAG, "$label update check failed", e)
+            FetchOutcome(null, "$label: ${e.javaClass.simpleName}")
         }
+    }
+
+    private fun firstGithubApk(json: JSONObject): String? {
+        val assets = json.optJSONArray("assets") ?: return null
+        for (i in 0 until assets.length()) {
+            val a = assets.optJSONObject(i) ?: continue
+            val name = a.optString("name")
+            val url = a.optString("browser_download_url")
+            if (name.endsWith(".apk", ignoreCase = true) && url.startsWith("https://")) {
+                return url
+            }
+        }
+        return null
     }
 
     private fun showDialog(activity: Activity, version: String, apkUrl: String) {

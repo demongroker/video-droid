@@ -31,7 +31,21 @@ data class FormatOptions(
     val trimStart: Int = 1,
     val trimEnd: Int = 1,
     val exportEnabled: Boolean = true,
-)
+) {
+    fun aspectLabel(): String {
+        val a = aspect.trim()
+        if (a.equals("original", ignoreCase = true)) return "Original"
+        if (a.startsWith("crop:", ignoreCase = true)) return "Fill ${a.substringAfter(':')}"
+        if (a.startsWith("pad:", ignoreCase = true)) return "Fit ${a.substringAfter(':')}"
+        return a
+    }
+
+    /** e.g. `720p · Fill 4:3 · trim off` or `720p · Fill 4:3 · trim 1s/1s` */
+    fun statusDetail(): String {
+        val trim = if (trimEnabled) "trim ${trimStart}s/${trimEnd}s" else "trim off"
+        return "$dlQuality · ${aspectLabel()} · $trim"
+    }
+}
 
 object FormatWorker {
     private val cancelRequested = AtomicBoolean(false)

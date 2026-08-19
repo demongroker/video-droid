@@ -121,10 +121,23 @@ class DownloadService : Service() {
         }
     }
 
+    private fun withJobDetail(jobLine: String): String {
+        val opts = DownloadQueue.peek(applicationContext)?.opts ?: return jobLine
+        if (jobLine.contains(" · trim ")) return jobLine
+        val active = jobLine.contains("Downloading") ||
+            jobLine.contains("Converting") ||
+            jobLine.contains("Queued") ||
+            jobLine.contains("Starting") ||
+            jobLine.contains("Trimming")
+        if (!active) return jobLine
+        return "$jobLine\n${opts.statusDetail()}"
+    }
+
     private fun publish(jobLine: String) {
+        val detailed = withJobDetail(jobLine)
         val waiting = DownloadQueue.waiting(applicationContext)
-        val ui = if (waiting > 0) "Queued ($waiting)\n$jobLine" else jobLine
-        updateNotification(composeNotif(jobLine, waiting))
+        val ui = if (waiting > 0) "Queued ($waiting)\n$detailed" else detailed
+        updateNotification(composeNotif(detailed, waiting))
         listener?.onStatus(ui)
     }
 
@@ -158,11 +171,13 @@ class DownloadService : Service() {
             Intent(this, DownloadService::class.java).setAction(ACTION_CANCEL),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val pct = Regex("""(?:Downloading|Converting) (\d+)%""").find(msg)?.groupValues?.get(1)?.toIntOrNull()
+        val pct = Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""").find(msg)?.groupValues?.get(1)?.toIntOrNull()
+        val first = msg.lineSequence().firstOrNull() ?: msg
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("VideoDroid")
-            .setContentText(msg)
+            .setContentText(first)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)

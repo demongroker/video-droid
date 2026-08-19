@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             status.text = "X login cleared"
         }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
+        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
 
         moreToggle.setOnClickListener {
             val open = moreSection.visibility != View.VISIBLE
@@ -164,8 +165,24 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         Thread {
             try {
                 val pkg = packageManager.getPackageInfo(packageName, 0)
-                UpdateChecker.check(this, pkg.versionName ?: "0.0")
+                UpdateChecker.check(this, pkg.versionName ?: "0.0", userInitiated = false)
             } catch (_: Throwable) { }
+        }.start()
+    }
+
+    fun showUpdateStatus(msg: String) {
+        runOnUiThread { status.text = msg }
+    }
+
+    private fun checkUpdateNow() {
+        status.text = "Checking update…"
+        Thread {
+            try {
+                val pkg = packageManager.getPackageInfo(packageName, 0)
+                UpdateChecker.check(this, pkg.versionName ?: "0.0", userInitiated = true)
+            } catch (t: Throwable) {
+                showUpdateStatus("Update check failed: ${t.javaClass.simpleName}")
+            }
         }.start()
     }
 
