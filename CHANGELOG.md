@@ -2,6 +2,15 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.5.8 (versionCode 25)
+
+- Open page: Adblock On/Off (persisted). Compact host list; never block page host or media (m3u8/mp4/webm/ts/mpd, video.twimg, googlevideo)
+- Open page: JS sniff after play (video src/currentSrc, media src hook, performance entries). Ignore blob/data for download; keep listening after page finish
+
+## 1.5.7 (versionCode 24)
+
+- Honest errors, singleTask recents, mediacodec bitrate, trim 1/1 persist
+
 ## 1.5.6 (versionCode 23)
 
 - Aspect spinner: full labels (Original, Fill 16:9, Fit 9:16, …) on the selected line and in the dropdown — wrap/2 lines, no middle ellipsize
