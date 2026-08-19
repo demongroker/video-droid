@@ -1,36 +1,54 @@
 # VideoDroid
 
-On-device Android video downloader + auto-formatter. Paste or share any video
-link, choose your settings, and it downloads with yt-dlp, trims the ends,
-crops/pads to your aspect ratio, and exports at your chosen quality — then
-saves the finished MP4 straight to your phone's Downloads.
+Phone-only Android video downloader. Paste or share a link, pick quality, tap
+Download. yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
-Fully offline: yt-dlp (via Chaquopy Python) and FFmpeg are bundled inside the
-APK. No server, no account.
+Current release: **1.6.1**.
 
-## Features
-- Download any link yt-dlp supports (YouTube, direct MP4, etc.)
-- Menu settings:
-  - Download quality: best / 1080p / 720p / 480p
-  - Export height: 720p / 480p / 1080p
-  - Aspect ratio: original, crop (4:3, 16:9, 1:1), pad (4:3, 16:9, 9:16)
-  - Auto-trim start / end (seconds)
-- Saves to `Downloads/VideoDroid/`
-- Share a link into the app to prefill it
+## How to use
+
+Recommended: **best** + **Original** + trim **Off**.
+
+- **best** is 1080-capped. There is a separate **4K** option. 1080 / 720 / 480
+  stay available.
+- **Export Off:** save the original file only. Fill / Fit / ratio / trim are
+  hidden. FFmpeg is skipped.
+- **Export On:** encode with **Fill** (crop) or **Fit** (pad). There is no
+  separate export-height control. Trim is only available when Export is On
+  (defaults 1s / 1s).
+
+Queue is FIFO with one active job. You can enqueue while something is
+downloading. Failures show a short reason plus **Open page** (in-app WebView
+with optional adblock).
+
+**More** holds Login X, Open page adblock, Check update, Changelog, and social
+presets. Each preset tap overrides all settings and persists:
+
+| Preset | Settings |
+|---|---|
+| X | Export On, best, Fit, Portrait 9:16, trim Off |
+| TikTok / Shorts / Reels | Fill 9:16 |
+| YouTube | Original |
+| Instagram | Fill 4:5 |
+| Facebook | Fit 16:9 |
+
+Changelog is also at `app/src/main/assets/CHANGELOG.md`.
+
+## Updates
+
+Check update (More) tries GitHub `releases/latest` first, then Tailscale
+`:8899`. No token in the app. While a job is running, update results are Toast
+only so they do not wipe download status.
 
 ## Build
-Requires Android SDK 34, JDK 17, Gradle 8.9, and a Python 3.11 for Chaquopy.
+
+JDK 17. Do not commit keystores, `gradle.properties`, or APKs.
 
 ```bash
 ./build.sh            # -> app/build/outputs/apk/release/app-release.apk
 ```
 
-Signing is configured via `signingConfigs.release`; the keystore and
-`gradle.properties` (which hold the signing passwords) are gitignored — supply
-your own keystore to build a signed APK.
+## Limits
 
-## Notes / limitations
-- On-device builds can't ship `curl_cffi`, so Cloudflare-challenged sites may
-  403. YouTube and most standard sites work fine.
-- Telegram bots cap uploads at 50MB — this app avoids that entirely since the
-  file is saved directly on the phone.
+- No `curl_cffi` on device; some Cloudflare sites 403. Use Open page.
+- Cookies stay on the phone (Login X).
