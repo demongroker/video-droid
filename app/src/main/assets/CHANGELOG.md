@@ -2,6 +2,14 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.22 (versionCode 49)
+
+- Fix HEVC/H.265 input: encode now uses **hardware decode** (`-hwaccel mediacodec -hwaccel_output_format nv12`) before the input file, so h264_mediacodec no longer fails with "Invalid data found when processing input" on H.265 downloads. Encode path outputs NV12 (`-pix_fmt nv12`) for the MediaCodec encoder. Copy/remux path untouched, still pure stream copy.
+
+## 1.6.21 (versionCode 48)
+
+- Fix 1.6.20 regression: convert never started after download. Removed re-export feature (persistSource/lastSourceOrNull) which caused the encode path to stall. Local video picker and H.264-only encode unaffected.
+
 ## 1.6.20 (versionCode 47)
 
 - X-safe export: Export On now encodes **H.264 (h264_mediacodec) + AAC only**. No mpeg4 fallback (X rejects MPEG-4 Part 2); if the MediaCodec encoder fails the job fails with a short reason and keeps the original.

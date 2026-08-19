@@ -488,6 +488,10 @@ object FormatWorker {
         if (opts.trimEnabled && tStart > 0) {
             args.addAll(listOf("-ss", tStart.toString()))
         }
+        if (!copy) {
+            // HW decode for HEVC/H.265: mediacodec feeds h264_mediacodec encoder.
+            args.addAll(listOf("-hwaccel", "mediacodec", "-hwaccel_output_format", "nv12"))
+        }
         args.addAll(listOf("-i", src.absolutePath))
         if (opts.trimEnabled && knownDuration && keep > 1.0 && tEnd >= 0) {
             args.addAll(listOf("-t", keep.toString()))
@@ -507,7 +511,7 @@ object FormatWorker {
         // Keep source fps: never pass -r.
         args.addAll(
             listOf(
-                "-pix_fmt", "yuv420p",
+                "-pix_fmt", "nv12",
                 "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out.absolutePath,
             )
         )
