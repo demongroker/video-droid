@@ -45,8 +45,8 @@ class DownloadService : Service() {
                         aspect = intent.getStringExtra(EXTRA_ASPECT) ?: "original",
                         crf = intent.getIntExtra(EXTRA_QV, 6),
                         trimEnabled = intent.getBooleanExtra(EXTRA_TRIM, true),
-                        trimStart = intent.getIntExtra(EXTRA_TSTART, 5),
-                        trimEnd = intent.getIntExtra(EXTRA_TEND, 3),
+                        trimStart = intent.getIntExtra(EXTRA_TSTART, 1),
+                        trimEnd = intent.getIntExtra(EXTRA_TEND, 1),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
                     )
                     DownloadQueue.enqueue(applicationContext, QueuedJob(url, opts))
@@ -149,7 +149,8 @@ class DownloadService : Service() {
 
     private fun buildNotification(msg: String): Notification {
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val cancel = PendingIntent.getService(

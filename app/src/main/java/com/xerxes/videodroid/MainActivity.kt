@@ -105,6 +105,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         dlQuality.setSelection(qi)
         exportSwitch.isChecked = prefs.getBoolean(KEY_EXPORT_ON, true)
         aspectRatio.setSelection(prefs.getInt(KEY_ASPECT, 0))
+        trimStart.setText(prefs.getInt(KEY_TRIM_START, 1).toString())
+        trimEnd.setText(prefs.getInt(KEY_TRIM_END, 1).toString())
         suppressPersist = false
         applyExportUi(exportSwitch.isChecked)
         applyTrimOnOff(trimSwitch.isChecked)
@@ -113,7 +115,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             persistCurrent(custom = true)
             clearRecommendedNotice()
         }
-        trimSwitch.setOnCheckedChangeListener { _, on -> applyTrimOnOff(on) }
+        trimSwitch.setOnCheckedChangeListener { _, on ->
+            applyTrimOnOff(on)
+            persistCurrent(custom = true)
+            clearRecommendedNotice()
+        }
 
         val persistListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -255,8 +261,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val dlQ = dlQuality.selectedItem.toString()
         val aspect = aspectToken(aspectRatio.selectedItem.toString())
         val trimOn = trimSwitch.isChecked
-        val tStart = trimStart.text.toString().toIntOrNull() ?: 5
-        val tEnd = trimEnd.text.toString().toIntOrNull() ?: 3
+        val tStart = trimStart.text.toString().toIntOrNull() ?: 1
+        val tEnd = trimEnd.text.toString().toIntOrNull() ?: 1
 
         persistCurrent(custom = false)
 
@@ -282,6 +288,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             .putString(KEY_QUALITY, dlQ)
             .putBoolean(KEY_EXPORT_ON, exportOn)
             .putInt(KEY_ASPECT, aPos)
+            .putInt(KEY_TRIM_START, trimStart.text.toString().toIntOrNull() ?: 1)
+            .putInt(KEY_TRIM_END, trimEnd.text.toString().toIntOrNull() ?: 1)
         if (custom && !isRecommendedSelection()) {
             ed.putString(KEY_CUSTOM_QUALITY, dlQ)
                 .putBoolean(KEY_CUSTOM_EXPORT_ON, exportOn)
@@ -421,8 +429,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val quality = opts?.dlQuality ?: (dlQuality.selectedItem?.toString() ?: "?")
         val aspect = opts?.aspect ?: aspectRatio.selectedItem?.toString() ?: "?"
         val trimOn = opts?.trimEnabled ?: trimSwitch.isChecked
-        val tStart = opts?.trimStart ?: (trimStart.text.toString().toIntOrNull() ?: 5)
-        val tEnd = opts?.trimEnd ?: (trimEnd.text.toString().toIntOrNull() ?: 3)
+        val tStart = opts?.trimStart ?: (trimStart.text.toString().toIntOrNull() ?: 1)
+        val tEnd = opts?.trimEnd ?: (trimEnd.text.toString().toIntOrNull() ?: 1)
         val qSize = DownloadQueue.size(this)
         val durKnown = JobDiag.durationKnown
         val durLine = when (durKnown) {
@@ -463,6 +471,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         private const val KEY_QUALITY = "last_quality"
         private const val KEY_EXPORT_ON = "export_on"
         private const val KEY_ASPECT = "last_aspect"
+        private const val KEY_TRIM_START = "trim_start_s"
+        private const val KEY_TRIM_END = "trim_end_s"
         private const val KEY_CUSTOM_QUALITY = "custom_quality"
         private const val KEY_CUSTOM_EXPORT_ON = "custom_export_on"
         private const val KEY_CUSTOM_ASPECT = "custom_aspect"

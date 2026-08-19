@@ -28,8 +28,8 @@ data class FormatOptions(
     val fps: Int = 30,
     val crf: Int = 6,
     val trimEnabled: Boolean = true,
-    val trimStart: Int = 5,
-    val trimEnd: Int = 3,
+    val trimStart: Int = 1,
+    val trimEnd: Int = 1,
     val exportEnabled: Boolean = true,
 )
 
@@ -142,7 +142,7 @@ object FormatWorker {
             var session: com.arthenica.ffmpegkit.FFmpegSession? = null
             if (originalAspect && opts.trimEnabled) {
                 emit("Trimming (copy)...")
-                val copyArgs = buildFfmpegArgs(src, out, null, opts, tStart, tEnd, known, keep, copy = true)
+                val copyArgs = buildFfmpegArgs(src, out, null, opts, tStart, tEnd, known, keep, copy = true, srcHeight = height)
                 session = executeConvert(copyArgs, expectedMs, emit, "Trimming")
                 JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
             }
@@ -151,14 +151,14 @@ object FormatWorker {
                 if (out.exists()) out.delete()
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 emit("Converting (fast)...")
-                val fastArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec")
+                val fastArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "h264_mediacodec", srcHeight = height)
                 session = executeConvert(fastArgs, expectedMs, emit, "Converting (fast)")
                 JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 if (!ReturnCode.isSuccess(session.returnCode)) {
                     if (out.exists()) out.delete()
                     emit("Converting (fallback)...")
-                    val fbArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "mpeg4")
+                    val fbArgs = buildFfmpegArgs(src, out, vf, opts, tStart, tEnd, known, keep, "mpeg4", srcHeight = height)
                     session = executeConvert(fbArgs, expectedMs, emit, "Converting")
                     JobDiag.noteFfmpeg(session.returnCode?.toString() ?: "null", session.output)
                 }
@@ -192,6 +192,12 @@ object FormatWorker {
     fun mapError(raw: String): String {
         val s = raw.lowercase()
         if (s.contains("cancel")) return "Cancelled"
+        if (s.contains("unsupported url") || s.contains("unsupported site")) {
+            return "Unsupported site. Open page."
+        }
+        if (s.contains("404") || s.contains("not found")) {
+            return "File gone (404)"
+        }
         if (s.contains("need x login")) return "Need X login"
         if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
             return "No video in this tweet"
@@ -207,11 +213,10 @@ object FormatWorker {
             || s.contains("timeout") || s.contains("timed out")
             || s.contains("no address associated") || s.contains("enotconn")
             || s.contains("econnrefused") || s.contains("offline")
-            || s.contains("unable to download") && s.contains("http")
         ) {
             return "No network"
         }
-        val cleaned = raw.replace(Regex("(?i)cookie[^\n]*"), "").trim()
+        val cleaned = raw.replace(Regex("(?i)cookie[^\\n]*"), "").trim()
         return cleaned.take(160).ifEmpty { "Download failed" }
     }
 
@@ -293,6 +298,7 @@ object FormatWorker {
         keep: Double,
         encoder: String = "mpeg4",
         copy: Boolean = false,
+        srcHeight: Int = 720,
     ): Array<String> {
         val args = ArrayList<String>()
         args.addAll(listOf("-y", "-v", "error"))
@@ -313,6 +319,9 @@ object FormatWorker {
         args.addAll(listOf("-c:v", encoder))
         if (encoder == "mpeg4") {
             args.addAll(listOf("-q:v", opts.crf.toString()))
+        } else if (encoder == "h264_mediacodec") {
+            val bv = if (srcHeight >= 1080) "12M" else "8M"
+            args.addAll(listOf("-b:v", bv, "-maxrate", bv, "-bufsize", if (srcHeight >= 1080) "24M" else "16M"))
         }
         // Keep source fps: never pass -r.
         args.addAll(

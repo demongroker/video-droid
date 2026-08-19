@@ -209,7 +209,7 @@
                         android:layout_weight="1"
                         android:hint="Start (seconds)"
                         android:inputType="number"
-                        android:text="5" />
+                        android:text="1" />
 
                     <EditText
                         android:id="@+id/trimEnd"
@@ -219,7 +219,7 @@
                         android:layout_weight="1"
                         android:hint="End (seconds)"
                         android:inputType="number"
-                        android:text="3" />
+                        android:text="1" />
                 </LinearLayout>
             </LinearLayout>
 
