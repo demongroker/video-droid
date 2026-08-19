@@ -105,25 +105,25 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Chip>(R.id.presetX).setOnClickListener {
-            applySocialPreset("X", exportOn = true, quality = "best", mode = "Fit", ratio = "Portrait 9:16")
+            applySocialPreset("X", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Portrait 9:16")
         }
         findViewById<Chip>(R.id.presetTikTok).setOnClickListener {
-            applySocialPreset("TikTok", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+            applySocialPreset("TikTok", exportOn = true, quality = "1080p", mode = "Fill", ratio = "Portrait 9:16")
         }
         findViewById<Chip>(R.id.presetShorts).setOnClickListener {
-            applySocialPreset("Shorts", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+            applySocialPreset("Shorts", exportOn = true, quality = "1080p", mode = "Fill", ratio = "Portrait 9:16")
         }
         findViewById<Chip>(R.id.presetReels).setOnClickListener {
-            applySocialPreset("Reels", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 9:16")
+            applySocialPreset("Reels", exportOn = true, quality = "1080p", mode = "Fill", ratio = "Portrait 9:16")
         }
         findViewById<Chip>(R.id.presetYouTube).setOnClickListener {
-            applySocialPreset("YouTube", exportOn = true, quality = "best", mode = "Original", ratio = "Portrait 9:16")
+            applySocialPreset("YouTube", exportOn = true, quality = "1080p", mode = "Original", ratio = "Portrait 9:16")
         }
         findViewById<Chip>(R.id.presetInstagram).setOnClickListener {
-            applySocialPreset("Instagram", exportOn = true, quality = "best", mode = "Fill", ratio = "Portrait 4:5")
+            applySocialPreset("Instagram", exportOn = true, quality = "1080p", mode = "Fill", ratio = "Portrait 4:5")
         }
         findViewById<Chip>(R.id.presetFacebook).setOnClickListener {
-            applySocialPreset("Facebook", exportOn = true, quality = "best", mode = "Fit", ratio = "Landscape 16:9")
+            applySocialPreset("Facebook", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Landscape 16:9")
         }
         presetsToggle.setOnClickListener { expandPresets() }
         wirePresetCollapse()
@@ -141,7 +141,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
                 s.adapter = it
             }
         }
-        val qualities = arrayOf("best", "4K", "1080p", "720p", "480p")
+        val qualities = arrayOf("4K", "1080p", "720p", "480p")
         val modes = arrayOf("Original", "Fill", "Fit")
         val ratios = arrayOf(
             "Landscape 16:9", "Landscape 4:3", "Landscape 21:9",
@@ -153,11 +153,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         spinner(aspectRatio, ratios)
 
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val savedQ = prefs.getString(KEY_QUALITY, "best") ?: "best"
+        val savedQ = prefs.getString(KEY_QUALITY, "1080p") ?: "1080p"
         val savedMode = prefs.getString(KEY_ASPECT_MODE, "Original") ?: "Original"
         val savedRatio = prefs.getString(KEY_ASPECT_RATIO, "Portrait 9:16") ?: "Portrait 9:16"
         suppressPersist = true
-        selectValue(dlQuality, savedQ, "best")
+        selectValue(dlQuality, savedQ, "1080p")
         exportSwitch.isChecked = prefs.getBoolean(KEY_EXPORT_ON, true)
         selectValue(aspectMode, savedMode, "Original")
         selectValue(aspectRatio, savedRatio, "Portrait 9:16")
@@ -516,7 +516,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private fun isRecommendedSelection(): Boolean {
         val q = dlQuality.selectedItem?.toString() ?: return false
         val mode = aspectMode.selectedItem?.toString() ?: return false
-        return q == "best" && mode.equals("Original", ignoreCase = true) && !trimSwitch.isChecked
+        return q == "1080p" && mode.equals("Original", ignoreCase = true) && !trimSwitch.isChecked
     }
 
     private fun currentAspectToken(): String {
@@ -544,21 +544,21 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private fun applyRecommended() {
         persistCurrent(custom = true)
         suppressPersist = true
-        selectValue(dlQuality, "best")
+        selectValue(dlQuality, "1080p")
         selectValue(aspectMode, "Original")
         applyAspectModeUi()
         trimSwitch.isChecked = false
         applyTrimOnOff(false)
         suppressPersist = false
         persistCurrent(custom = false)
-        status.text = "Recommended: best / original / trim off"
+        status.text = "Recommended: 1080p / original / trim off"
     }
 
     private fun applyMyLast() {
         val p = getSharedPreferences(PREFS, MODE_PRIVATE)
         val q = p.getString(KEY_CUSTOM_QUALITY, null) ?: return
         suppressPersist = true
-        selectValue(dlQuality, q, "best")
+        selectValue(dlQuality, q, "1080p")
         exportSwitch.isChecked = p.getBoolean(KEY_CUSTOM_EXPORT_ON, exportSwitch.isChecked)
         selectValue(aspectMode, p.getString(KEY_CUSTOM_ASPECT_MODE, "Original") ?: "Original", "Original")
         selectValue(aspectRatio, p.getString(KEY_CUSTOM_ASPECT_RATIO, "Portrait 9:16") ?: "Portrait 9:16", "Portrait 9:16")

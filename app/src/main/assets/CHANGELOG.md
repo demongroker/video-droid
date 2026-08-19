@@ -2,6 +2,10 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.6.26 (versionCode 53)
+
+- **"best" removed**: quality dropdown is now 4K / 1080p / 720p / 480p only. All social presets (X, TikTok, Shorts, Reels, YouTube, Instagram, Facebook) and Recommended default to **1080p**.
+
 ## 1.6.25 (versionCode 52)
 
 - **Export H.264-REQUIRED**: Export downloads now use AVC-only format (`bv*[vcodec^=avc1][height<=1080]+ba/...`) with **no any-codec fallback**. If the video is HEVC-only, the download fails fast with a clear message instead of grabbing 676 MB of undecodable HEVC. Export-OFF and 1080/720/480 presets unchanged.
