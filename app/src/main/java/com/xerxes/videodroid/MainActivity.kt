@@ -33,7 +33,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private lateinit var exportOptions: LinearLayout
     private lateinit var moreSection: LinearLayout
     private lateinit var moreToggle: TextView
+    private lateinit var aspectMode: Spinner
     private lateinit var aspectRatio: Spinner
+    private lateinit var aspectRatioRow: LinearLayout
     private lateinit var trimSwitch: Switch
     private lateinit var trimOnOff: TextView
     private lateinit var trimFields: LinearLayout
@@ -59,7 +61,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         exportOptions = findViewById(R.id.exportOptions)
         moreSection = findViewById(R.id.moreSection)
         moreToggle = findViewById(R.id.moreToggle)
+        aspectMode = findViewById(R.id.aspectMode)
         aspectRatio = findViewById(R.id.aspectRatio)
+        aspectRatioRow = findViewById(R.id.aspectRatioRow)
         trimSwitch = findViewById(R.id.trimSwitch)
         trimOnOff = findViewById(R.id.trimOnOff)
         trimFields = findViewById(R.id.trimFields)
@@ -93,23 +97,31 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             }
         }
         val qualities = arrayOf("best", "1080p", "720p", "480p")
+        val modes = arrayOf("Original", "Fill", "Fit")
+        val ratios = arrayOf(
+            "Landscape 16:9", "Landscape 4:3", "Landscape 21:9",
+            "Portrait 9:16", "Portrait 3:4", "Portrait 4:5",
+            "Square 1:1",
+        )
         spinner(dlQuality, qualities)
-        spinner(aspectRatio, arrayOf(
-            "Original", "Fill 4:3", "Fill 16:9", "Fill 1:1",
-            "Fit 4:3", "Fit 16:9", "Fit 9:16"
-        ))
+        spinner(aspectMode, modes)
+        spinner(aspectRatio, ratios)
 
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val savedQ = prefs.getString(KEY_QUALITY, "720p") ?: "720p"
         val qi = qualities.indexOf(savedQ).let { if (it >= 0) it else 2 }
+        val savedMode = prefs.getString(KEY_ASPECT_MODE, "Original") ?: "Original"
+        val savedRatio = prefs.getString(KEY_ASPECT_RATIO, "Portrait 9:16") ?: "Portrait 9:16"
         suppressPersist = true
         dlQuality.setSelection(qi)
         exportSwitch.isChecked = prefs.getBoolean(KEY_EXPORT_ON, true)
-        aspectRatio.setSelection(prefs.getInt(KEY_ASPECT, 0))
+        selectValue(aspectMode, savedMode)
+        selectValue(aspectRatio, savedRatio)
         trimStart.setText(prefs.getInt(KEY_TRIM_START, 1).toString())
         trimEnd.setText(prefs.getInt(KEY_TRIM_END, 1).toString())
         suppressPersist = false
         applyExportUi(exportSwitch.isChecked)
+        applyAspectModeUi()
         applyTrimOnOff(trimSwitch.isChecked)
         exportSwitch.setOnCheckedChangeListener { _, on ->
             applyExportUi(on)
@@ -130,6 +142,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         dlQuality.onItemSelectedListener = persistListener
+        aspectMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                applyAspectModeUi()
+                persistCurrent(custom = true)
+                clearRecommendedNotice()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
         aspectRatio.onItemSelectedListener = persistListener
 
         findViewById<Button>(R.id.recommendedButton).setOnClickListener { applyRecommended() }
@@ -213,6 +233,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val raw = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
         val url = firstUrl(raw)
         urlInput.setText(url)
+        if (url.contains("twitter.com", ignoreCase = true) || url.contains("://x.com", ignoreCase = true) ||
+            url.contains("://www.x.com", ignoreCase = true)) {
+            suppressPersist = true
+            selectValue(aspectMode, "Fit")
+            selectValue(aspectRatio, "Portrait 9:16")
+            applyAspectModeUi()
+            suppressPersist = false
+        }
         if (enqueueIfBusy && (busy || DownloadQueue.size(this) > 0) && url.isNotBlank()) {
             launchJob(url)
         }
@@ -276,7 +304,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         if (url.isEmpty()) { status.text = "Paste a link first"; return }
 
         val dlQ = dlQuality.selectedItem.toString()
-        val aspect = aspectToken(aspectRatio.selectedItem.toString())
+        val aspect = currentAspectToken()
         val trimOn = trimSwitch.isChecked
         val tStart = trimStart.text.toString().toIntOrNull() ?: 1
         val tEnd = trimEnd.text.toString().toIntOrNull() ?: 1
@@ -300,41 +328,48 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             dlQuality.selectedItem.toString()
         } else return
         val exportOn = exportSwitch.isChecked
-        val aPos = aspectRatio.selectedItemPosition
+        val mode = if (::aspectMode.isInitialized && aspectMode.selectedItem != null) {
+            aspectMode.selectedItem.toString()
+        } else return
+        val ratio = if (::aspectRatio.isInitialized && aspectRatio.selectedItem != null) {
+            aspectRatio.selectedItem.toString()
+        } else return
         val ed = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putString(KEY_QUALITY, dlQ)
             .putBoolean(KEY_EXPORT_ON, exportOn)
-            .putInt(KEY_ASPECT, aPos)
+            .putString(KEY_ASPECT_MODE, mode)
+            .putString(KEY_ASPECT_RATIO, ratio)
             .putInt(KEY_TRIM_START, trimStart.text.toString().toIntOrNull() ?: 1)
             .putInt(KEY_TRIM_END, trimEnd.text.toString().toIntOrNull() ?: 1)
         if (custom && !isRecommendedSelection()) {
             ed.putString(KEY_CUSTOM_QUALITY, dlQ)
                 .putBoolean(KEY_CUSTOM_EXPORT_ON, exportOn)
-                .putInt(KEY_CUSTOM_ASPECT, aPos)
+                .putString(KEY_CUSTOM_ASPECT_MODE, mode)
+                .putString(KEY_CUSTOM_ASPECT_RATIO, ratio)
         }
         ed.apply()
     }
 
     private fun isRecommendedSelection(): Boolean {
         val q = dlQuality.selectedItem?.toString() ?: return false
-        val a = aspectRatio.selectedItem?.toString() ?: return false
-        return q == "best" && a.equals("Original", ignoreCase = true) && !trimSwitch.isChecked
+        val mode = aspectMode.selectedItem?.toString() ?: return false
+        return q == "best" && mode.equals("Original", ignoreCase = true) && !trimSwitch.isChecked
     }
 
-    /** Spinner labels → FormatWorker tokens (original / crop:X / pad:X). */
-    private fun aspectToken(label: String): String {
-        val t = label.trim()
-        if (t.equals("Original", ignoreCase = true) || t.equals("original", ignoreCase = true)) {
-            return "original"
-        }
-        if (t.startsWith("Fill ", ignoreCase = true)) {
-            return "crop:" + t.substringAfter(' ').replace(" ", "")
-        }
-        if (t.startsWith("Fit ", ignoreCase = true)) {
-            return "pad:" + t.substringAfter(' ').replace(" ", "")
-        }
-        if (t.startsWith("crop ") || t.startsWith("pad ")) return t.replace(" ", ":")
-        return t.replace(" ", ":")
+    private fun currentAspectToken(): String {
+        val mode = aspectMode.selectedItem?.toString() ?: "Original"
+        val ratio = aspectRatio.selectedItem?.toString() ?: "Portrait 9:16"
+        return aspectToken(mode, ratio)
+    }
+
+    /** Mode + grouped ratio labels → FormatWorker tokens (original / crop:W:H / pad:W:H). */
+    private fun aspectToken(mode: String, ratioLabel: String): String {
+        val m = mode.trim()
+        if (m.equals("Original", ignoreCase = true)) return "original"
+        val spec = ratioLabel.trim().substringAfterLast(' ').replace(" ", "")
+        if (m.equals("Fill", ignoreCase = true)) return "crop:$spec"
+        if (m.equals("Fit", ignoreCase = true)) return "pad:$spec"
+        return spec
     }
 
     private fun clearRecommendedNotice() {
@@ -347,7 +382,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         persistCurrent(custom = true)
         suppressPersist = true
         selectValue(dlQuality, "best")
-        selectValue(aspectRatio, "Original")
+        selectValue(aspectMode, "Original")
+        applyAspectModeUi()
         trimSwitch.isChecked = false
         applyTrimOnOff(false)
         suppressPersist = false
@@ -361,10 +397,12 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         suppressPersist = true
         selectValue(dlQuality, q)
         exportSwitch.isChecked = p.getBoolean(KEY_CUSTOM_EXPORT_ON, exportSwitch.isChecked)
-        aspectRatio.setSelection(p.getInt(KEY_CUSTOM_ASPECT, aspectRatio.selectedItemPosition))
+        selectValue(aspectMode, p.getString(KEY_CUSTOM_ASPECT_MODE, aspectMode.selectedItem?.toString() ?: "Original") ?: "Original")
+        selectValue(aspectRatio, p.getString(KEY_CUSTOM_ASPECT_RATIO, aspectRatio.selectedItem?.toString() ?: "Portrait 9:16") ?: "Portrait 9:16")
         suppressPersist = false
         persistCurrent(custom = false)
         applyExportUi(exportSwitch.isChecked)
+        applyAspectModeUi()
         status.text = "Restored your last settings"
     }
 
@@ -387,6 +425,12 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private fun applyTrimOnOff(on: Boolean) {
         trimOnOff.text = if (on) "On" else "Off"
         trimFields.visibility = if (on) View.VISIBLE else View.GONE
+    }
+
+    private fun applyAspectModeUi() {
+        if (!::aspectMode.isInitialized || !::aspectRatioRow.isInitialized) return
+        val original = aspectMode.selectedItem?.toString().equals("Original", ignoreCase = true)
+        aspectRatioRow.visibility = if (original) View.GONE else View.VISIBLE
     }
 
     private fun applyExportUi(on: Boolean) {
@@ -487,12 +531,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         private const val PREFS = "videodroid"
         private const val KEY_QUALITY = "last_quality"
         private const val KEY_EXPORT_ON = "export_on"
-        private const val KEY_ASPECT = "last_aspect"
+        private const val KEY_ASPECT_MODE = "last_aspect_mode"
+        private const val KEY_ASPECT_RATIO = "last_aspect_ratio"
         private const val KEY_TRIM_START = "trim_start_s"
         private const val KEY_TRIM_END = "trim_end_s"
         private const val KEY_CUSTOM_QUALITY = "custom_quality"
         private const val KEY_CUSTOM_EXPORT_ON = "custom_export_on"
-        private const val KEY_CUSTOM_ASPECT = "custom_aspect"
+        private const val KEY_CUSTOM_ASPECT_MODE = "custom_aspect_mode"
+        private const val KEY_CUSTOM_ASPECT_RATIO = "custom_aspect_ratio"
         private const val KEY_BATTERY_ASKED = "battery_opt_asked"
         private const val REQ_POST_NOTIF = 2
         private const val REQ_OPEN_PAGE = 3

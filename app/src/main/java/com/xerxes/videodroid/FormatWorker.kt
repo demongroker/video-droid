@@ -115,13 +115,14 @@ object FormatWorker {
             val info = JSONObject(result)
             val src = File(info.getString("path"))
             if (!src.exists()) return FormatResult(false, "Download produced no file")
+            val title = info.optString("title", "")
 
             val originalAspect = opts.aspect.equals("original", ignoreCase = true)
             // Export off, or Original + trim off: never re-encode.
             if (!opts.exportEnabled || (originalAspect && !opts.trimEnabled)) {
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 val ext = src.extension.ifEmpty { "mp4" }
-                val name = fileName(opts, ext)
+                val name = fileName(opts, ext, title)
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
                 src.delete()
                 if (uri == null) return FormatResult(false, "Could not save to Downloads")
@@ -186,7 +187,7 @@ object FormatWorker {
             if (!out.exists()) return FormatResult(false, "FFmpeg produced no output")
 
             emit("Saving to phone...")
-            val name = fileName(opts, "mp4")
+            val name = fileName(opts, "mp4", title)
             val uri = saveToDownloads(context, out, name)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
             src.delete(); out.delete()
@@ -367,14 +368,43 @@ object FormatWorker {
     }
 
     fun qualityTag(opts: FormatOptions): String {
-        val q = opts.dlQuality.lowercase()
-        if (q == "best") return "best"
+        val q = opts.dlQuality.trim()
+        if (q.equals("best", ignoreCase = true)) return "best"
         val digits = q.filter { it.isDigit() }
-        return digits.ifEmpty { q.substringBefore("p").ifEmpty { "best" } }
+        return if (digits.isNotEmpty()) "${digits}p" else q.replace(" ", "")
     }
 
-    fun fileName(opts: FormatOptions, ext: String): String {
-        return "videodroid_${qualityTag(opts)}_${System.currentTimeMillis()}.$ext"
+    fun aspectFileTag(opts: FormatOptions): String {
+        val a = opts.aspect.trim()
+        if (a.equals("original", ignoreCase = true)) return "Original"
+        val mode = when {
+            a.startsWith("crop:", ignoreCase = true) -> "Fill"
+            a.startsWith("pad:", ignoreCase = true) -> "Fit"
+            else -> ""
+        }
+        val spec = a.substringAfter(':').replace(":", "")
+        return "$mode$spec"
+    }
+
+    fun shortTitle(raw: String?): String {
+        val sb = StringBuilder()
+        for (c in raw.orEmpty()) {
+            if (c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9') {
+                sb.append(c)
+                if (sb.length >= 20) break
+            }
+        }
+        return if (sb.isEmpty()) "video" else sb.toString()
+    }
+
+    fun fileName(opts: FormatOptions, ext: String, title: String? = null): String {
+        val base = "${shortTitle(title)}_${qualityTag(opts)}_${aspectFileTag(opts)}"
+        val destDir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "VideoDroid",
+        )
+        val candidate = File(destDir, "$base.$ext")
+        return if (candidate.exists()) "${base}_${System.currentTimeMillis()}.$ext" else "$base.$ext"
     }
 
     fun saveToDownloads(context: Context, file: File, name: String, mime: String = "video/mp4"): Uri? {

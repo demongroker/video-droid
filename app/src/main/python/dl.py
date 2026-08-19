@@ -222,10 +222,11 @@ def _twitter_fallback_info(status_id, quality):
         "duration": chosen.get("duration") or tweet.get("duration") or 0,
         "width": chosen.get("width") or 0,
         "height": chosen.get("height") or 0,
+        "title": tweet.get("text") or tweet.get("altText") or "",
     }
 
 
-def _download_direct(url, dest_base, duration=0, width=0, height=0):
+def _download_direct(url, dest_base, duration=0, width=0, height=0, title=""):
     _check_cancel()
     dest = dest_base + ".mp4"
     req = urllib.request.Request(
@@ -258,6 +259,7 @@ def _download_direct(url, dest_base, duration=0, width=0, height=0):
         "duration": duration or 0,
         "width": width or 0,
         "height": height or 0,
+        "title": title or "",
     }
 
 
@@ -374,6 +376,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None, progress=
                 duration=fb.get("duration") or 0,
                 width=fb.get("width") or 0,
                 height=fb.get("height") or 0,
+                title=fb.get("title") or "",
             ))
         except (_Cancelled, NeedXLogin, NoVideoInTweet):
             raise
@@ -393,6 +396,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None, progress=
                 "duration": (info or {}).get("duration") or 0,
                 "width": (info or {}).get("width") or 0,
                 "height": (info or {}).get("height") or 0,
+                "title": (info or {}).get("title") or "",
             })
     if twid:
         raise NoVideoInTweet("No video in this tweet")

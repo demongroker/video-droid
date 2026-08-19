@@ -155,15 +155,36 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Aspect ratio"
+                    android:text="Aspect"
                     android:textSize="13sp" />
 
                 <Spinner
-                    android:id="@+id/aspectRatio"
+                    android:id="@+id/aspectMode"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
                     android:spinnerMode="dropdown" />
+
+                <LinearLayout
+                    android:id="@+id/aspectRatioRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Ratio"
+                        android:textSize="13sp" />
+
+                    <Spinner
+                        android:id="@+id/aspectRatio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:spinnerMode="dropdown" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
