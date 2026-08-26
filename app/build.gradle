@@ -4,6 +4,13 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Version catalog consumption confirmed via libs.versions.toml
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+    id 'com.chaquo.python' version '16.1.0' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}
+
 android {
     namespace 'com.xerxes.videodroid'
     compileSdk 34
@@ -63,17 +70,27 @@ chaquopy {
     }
 }
 
-// VERSION CATALOG - move dependency versions here
-// Created via: ./gradlew initMavenLibs --write-locks
+// --- DEPENDENCY LOCKING ENABLED ---
+// Lock all configurations so dependency resolution is reproducible
+dependencyLocking {
+    lockAllConfigurations()
+}
 
+// Version catalog (libs.versions.toml) is consumed below.
+// The Android plugin uses these versions at build time.
 dependencies {
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'io.github.maitrungduc1410:ffmpeg-kit-full:7.1.5'
-    implementation 'androidx.room:room-ktx:2.6.0'
-    kapt 'androidx.room:room-compiler:2.6.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    // androidX cores
+    implementation(libs.androidx.core.core_ktx)
+    implementation(libs.androidx.appcompat.appcompat)
+    implementation(libs.google.material.material)
+    implementation(libs.androidx.constraintlayout.constraintlayout)
+    // FFmpeg
+    implementation(libs.ffmpeg_kit_full)
+    // Room
+    implementation(libs.room_ktx)
+    kapt(libs.room_compiler)
+    // Coroutines
+    implementation(libs.coroutines_android)
+    // OkHttp
+    implementation(libs.okhttp)
 }
