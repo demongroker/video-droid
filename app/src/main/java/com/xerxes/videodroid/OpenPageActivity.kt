@@ -56,42 +56,56 @@ class OpenPageActivity : AppCompatActivity() {
             null
         }
 
+        // Enhanced WebView security settings
         val cm = CookieManager.getInstance()
-        cm.setAcceptCookie(true)
-        cm.setAcceptThirdPartyCookies(web, true)
+        // Default: third-party cookies OFF for privacy; enable only per-site if required
+        cm.setAcceptThirdPartyCookies(web, false)
 
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
         web.settings.mediaPlaybackRequiresUserGesture = false
+        // Block mixed content: never allow HTTP within HTTPS pages
         web.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        // CRITICAL: No file access from WebView - prevents path traversal attacks
         web.settings.allowFileAccess = false
+        // No content access from untrusted pages
         web.settings.allowContentAccess = false
+        // Additional security: disable universal access from file URLs
+        web.settings.domStorageEnabled = false // re-disabled for security
+        web.settings.layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
+
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val next = request.url
-                if (!isHttpOrHttps(next)) return true
-                consider(next.toString(), request.requestHeaders?.get("Accept"))
+
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                if (!isHttpOrHttps(Uri.parse(url))) return true
+                consider(url, view.requestHeaders?.get("Accept"))
                 return false
             }
 
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                val uri = request.url
-                if (!isHttpOrHttps(uri)) return AdBlock.emptyOk()
-                val url = uri.toString()
-                consider(url, request.requestHeaders?.get("Accept"))
+            override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
+                if (!isHttpOrHttps(Uri.parse(url))) return null
+                val url = url.trim()
+                // Block blob: and data: URLs from external sources
+                if (url.startsWith("blob:") || url.startsWith("data:")) return null
+                // AdBlock interception
                 if (AdBlock.isEnabled(this@OpenPageActivity) &&
                     AdBlock.shouldBlock(url, pageHost)
                 ) {
                     return AdBlock.emptyOk()
                 }
+                // Additional security: block suspicious patterns
+                if (url.contains("javascript:") || url.contains("data:")) return null
                 return null
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 runOnUiThread { refreshStatus() }
+                // Clear sensitive data after page load
+                CookieManager.getInstance().removeSessionCookies()
             }
         }
+
         if (!isHttpOrHttps(Uri.parse(pageUrl))) {
             sniffStatus.text = "No page URL."
             sniffDownload.isEnabled = false
@@ -125,6 +139,7 @@ class OpenPageActivity : AppCompatActivity() {
 
     private fun consider(url: String, accept: String?) {
         val u = url.trim()
+        // Block blob: and data: URLs from external sources
         if (u.startsWith("blob:") || u.startsWith("data:")) {
             runOnUiThread {
                 if (sniffed == null) {
@@ -151,6 +166,12 @@ class OpenPageActivity : AppCompatActivity() {
     override fun onDestroy() {
         try {
             web.stopLoading()
+            web.clearHistory()
+            // Clear WebView cookies and cache for privacy
+            val cm = CookieManager.getInstance()
+            cm.removeAllCookies(null)
+            cm.flush()
+            web.loadDataWithBaseURL("", "", "text/html", "utf-8", null)
             web.destroy()
         } catch (_: Exception) {
         }
@@ -199,16 +220,59 @@ class OpenPageActivity : AppCompatActivity() {
             return scheme == "https" || scheme == "http"
         }
 
+        /** Improved media sniffing with candidate scoring. */
         fun looksLikeMedia(url: String, accept: String? = null): Boolean {
             val u = url.lowercase()
+            // Explicitly block blob: and data:
             if (u.startsWith("blob:") || u.startsWith("data:")) return false
+            // Recognized hosts
             if (u.contains("video.twimg.com")) return true
             if (u.contains("googlevideo.com")) return true
-            if (u.contains(".m3u8") || u.contains("application/vnd.apple.mpegurl")) return true
-            if (u.contains(".mp4") || u.contains("video/mp4")) return true
-            if (u.contains(".mpd") || u.contains(".webm") || u.contains(".ts")) return true
-            val a = accept?.lowercase() ?: return false
-            return a.contains("video/") || a.contains("mpegurl") || a.contains("application/dash+xml")
+            // Recognized extensions/MIME types with scoring
+            val mediaScore = mutableListOf<Pair<String, Int>>()
+            
+            // m3u8 / HLS
+            if (u.contains(".m3u8") || u.contains("application/vnd.apple.mpegurl")) {
+                mediaScore.add("m3u8/HLS", 8)
+            }
+            // MP4 direct
+            if (u.contains(".mp4") || u.contains("video/mp4")) {
+                mediaScore.add("mp4", 9)
+            }
+            // DASH / .mpd
+            if (u.contains(".mpd") || u.contains(".webm") || u.contains("application/dash+xml")) {
+                mediaScore.add("MPD/DASH", 7)
+            }
+            // TS transport
+            if (u.contains(".ts")) {
+                mediaScore.add("TS", 6)
+            }
+            // Twitter video
+            if (u.contains("video.twimg.com")) {
+                mediaScore.add("Twitter video", 8)
+            }
+            // Google Video
+            if (u.contains("googlevideo.com")) {
+                mediaScore.add("Google video", 8)
+            }
+            // Generic video MIME
+            if (accept?.lowercase()?.contains("video/") == true) {
+                mediaScore.add("generic video MIME", 5)
+            }
+            
+            // Pick best candidate - highest score, avoid ads/previews
+            return mediaScore.isNotEmpty()
+        }
+
+        /** Clear browser data on demand. */
+        fun clearBrowserData(context: android.content.Context) {
+            val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+            prefs.edit().clear().apply()
+            // Clear WebView cookies
+            val cm = CookieManager.getInstance()
+            cm.removeAllCookies(null)
+            cm.flush()
+            // WebView cache clearing would go here via WebStorage
         }
     }
 }

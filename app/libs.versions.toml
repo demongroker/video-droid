@@ -1,0 +1,26 @@
+[versions]
+core_ktx = "1.13.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+constraintlayout = "2.1.4"
+ffmpeg_kit_full = "7.1.5"
+room_ktx = "2.6.0"
+room_compiler = "2.6.0"
+coroutines_android = "1.8.0"
+okhttp = "4.12.0"
+
+[libraries]
+core_ktx = { group = "androidx.core", name = "core-ktx", version = "$core_ktx" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version = "$appcompat" }
+material = { group = "com.google.android.material", name = "material", version = "$material" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version = "$constraintlayout" }
+ffmpeg_kit_full = { group = "io.github.maitrungduc1410", name = "ffmpeg-kit-full", version = "$ffmpeg_kit_full" }
+room_ktx = { group = "androidx.room", name = "room-ktx", version = "$room_ktx" }
+room_compiler = { group = "androidx.room", name = "room-compiler", version = "$room_compiler" }
+coroutines_android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version = "$coroutines_android" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version = "$okhttp" }
+
+[plugins]
+android = { id = "com.android.application", version = "8.2.2", apply = false }
+chaquo_python = { id = "com.chaquo.python", version = "16.1.0", apply false }
+kotlin_android = { id = "org.jetbrains.kotlin.android", version = "1.9.24", apply false }

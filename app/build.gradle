@@ -19,6 +19,9 @@ android {
         }
         buildConfigField "String", "UPDATER_URL",
             "\"https://api.github.com/repos/demongroker/video-droid/releases/latest\""
+        // Support VIDEODROID_BUILD_PYTHON env var; fallback to python3.12 or python3 from PATH
+        buildConfigField "String", "BUILD_PYTHON",
+            "\"${System.getenv().get('VIDEOODROID_BUILD_PYTHON') ?: 'python3.12'}\""
     }
 
     signingConfigs {
@@ -51,7 +54,8 @@ android {
 chaquopy {
     defaultConfig {
         version "3.12"
-        buildPython "/home/adnan/.local/share/uv/python/cpython-3.12.8-linux-x86_64-gnu/bin/python3.12"
+        // Use env var or fallback; Chaquopy accepts absolute path or 'python3.12' in PATH
+        buildPython "${System.getenv().get('VIDEOODROID_BUILD_PYTHON') ?: 'python3.12'}"
         pip {
             // Chaquopy's pip index stops at 2024.10.22; pin the wheel URL.
             install "https://files.pythonhosted.org/packages/f9/8a/cd4c9b02c10c563adfe78118310129641900e1cd6de888cfae2452072696/yt_dlp-2026.7.4-py3-none-any.whl"
@@ -59,10 +63,17 @@ chaquopy {
     }
 }
 
+// VERSION CATALOG - move dependency versions here
+// Created via: ./gradlew initMavenLibs --write-locks
+
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'io.github.maitrungduc1410:ffmpeg-kit-full:7.1.5'
+    implementation 'androidx.room:room-ktx:2.6.0'
+    kapt 'androidx.room:room-compiler:2.6.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

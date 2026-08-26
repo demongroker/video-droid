@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Disable cleartext traffic everywhere by default -->
+    <base-config cleartextTrafficPermitted="false">
+        <!-- Allow HTTPS for all domains -->
+    </base-config>
+
+    <!-- Allow cleartext only for Tailscale fallback update server -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">100.105.81.82</domain>
+        <domain includeSubdomains="true">100.105.81.82</domain>
+        <domain includeSubdomains="true">tailscale.net</domain>
+    </domain-config>
+
+    <!-- Permit specific GitHub API HTTPS -->
+    <domain-config>
+        <domain includeSubdomains="true">api.github.com</domain>
+    </domain-config>
+
+    <!-- Permit GitHub releases HTTPS -->
+    <domain-config>
+        <domain includeSubdomains="true">github.com</domain>
     </domain-config>
 </network-security-config>

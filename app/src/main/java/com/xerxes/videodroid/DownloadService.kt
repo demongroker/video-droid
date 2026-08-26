@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.TaskStackBuilder
 
 class DownloadService : Service() {
 
@@ -27,7 +28,29 @@ class DownloadService : Service() {
 
     private val pumpLock = Any()
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    // Notification channel setup
+    private val NOTIFICATION_CHANNEL_ID = "videodroid_download_channel"
+    private val NOTIFICATION_ID = 1001
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "VideoDroid Downloads",
+                NotificationImportance.LOW
+            ).apply {
+                description = "Background download and processing service"
+                importance = NotificationImportance.LOW
+            }
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -39,6 +62,12 @@ class DownloadService : Service() {
             ACTION_START -> {
                 val url = intent.getStringExtra(EXTRA_URL)
                 if (!url.isNullOrBlank() || intent.getStringExtra(EXTRA_LOCAL_PATH)?.isNotBlank() == true) {
+                    // Get job ID from intent
+                    val jobId = intent.getLongExtra(EXTRA_JOB_ID, 0L)
+
+                    // Update job status to DOWNLOADING in database
+                    DownloadQueue.updateJobStatus(applicationContext, jobId, "DOWNLOADING", "", 0)
+
                     val opts = FormatOptions(
                         dlQuality = intent.getStringExtra(EXTRA_DLQ) ?: "720p",
                         exportHeight = intent.getIntExtra(EXTRA_HEIGHT, 1080),
@@ -49,23 +78,27 @@ class DownloadService : Service() {
                         trimEnd = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TEND, 1)),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
                     )
-                    DownloadQueue.enqueue(
-                        applicationContext,
-                        QueuedJob(
-                            url = url.orEmpty(),
-                            opts = opts,
-                            localPath = intent.getStringExtra(EXTRA_LOCAL_PATH).orEmpty(),
-                        ),
-                    )
+
+                    // Enqueue job
+                    DownloadQueue.enqueue(applicationContext, com.xerxes.videodroid.QueuedJob(
+                        url = url.orEmpty(),
+                        opts = opts,
+                        localPath = intent.getStringExtra(EXTRA_LOCAL_PATH)?.orEmpty() ?: "",
+                        startedAt = System.currentTimeMillis()
+                    ))
+
+                    // Mark as started in database
+                    DownloadQueue.updateJobStatus(applicationContext, jobId, "DOWNLOADING", "", 0)
+
+                    ensurePump()
                 }
-                ensurePump()
             }
             else -> {
-                // Process death / sticky restart: resume remaining URLs.
+                // Process death / sticky restart: resume remaining URLs from database
                 if (DownloadQueue.size(applicationContext) > 0) ensurePump()
                 else {
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf(startId)
+                    stopSelf()
                 }
             }
         }
@@ -105,14 +138,38 @@ class DownloadService : Service() {
                 }
                 lastJobLine = "Starting..."
                 publish(lastJobLine)
+
                 val res = try {
-                    FormatWorker.run(applicationContext, next.url, next.opts, { msg ->
-                        lastJobLine = msg
-                        publish(msg)
-                    }, next.localPath)
+                    // Get job options from database
+                    val opts = next.opts ?: FormatOptions(
+                        dlQuality = "720p", exportHeight = 1080,
+                        aspect = "original", fps = 30, crf = 3,
+                        trimEnabled = true, trimStart = 1, trimEnd = 1,
+                        exportEnabled = true
+                    )
+
+                    FormatWorker.run(
+                        applicationContext,
+                        next.url,
+                        opts,
+                        { msg -> lastJobLine = msg; publish(msg) },
+                        next.localPath,
+                        next.id
+                    )
                 } catch (t: Throwable) {
-                    FormatResult(false, t.message ?: "Failed")
+                    // Update job status with error
+                    val errorMsg = t.message ?: "Failed"
+                    DownloadQueue.updateJobStatus(
+                        applicationContext,
+                        next.id,
+                        "FAILED",
+                        errorMsg,
+                        0,
+                        System.currentTimeMillis()
+                    )
+                    FormatResult(false, errorMsg)
                 }
+
                 DownloadQueue.completeCurrent(applicationContext)
                 listener?.onFinished(res)
             }
@@ -148,104 +205,51 @@ class DownloadService : Service() {
         listener?.onStatus(ui)
     }
 
-    private fun composeNotif(jobLine: String, waiting: Int = DownloadQueue.waiting(applicationContext)): String {
-        return if (waiting > 0) "$jobLine · $waiting waiting" else jobLine
-    }
+    private fun composeNotif(detailed: String, waiting: Int = 0): Notification {
+        val contentTitle = if (waiting > 0) "VideoDroid (Queued $waiting)" else "VideoDroid"
+        val contentText = detailed
 
-    private fun startInForeground(msg: String) {
-        ensureChannel()
-        val n = buildNotification(msg)
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIF_ID, n)
+        val resultIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TASK)
         }
-    }
+        val stackBuilder = TaskStackBuilder.create(this)
+        stackBuilder.addNextIntent(resultIntent)
+        val pendingIntent = stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    private fun updateNotification(msg: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(msg))
-    }
-
-    private fun buildNotification(msg: String): Notification {
-        val open = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val cancel = PendingIntent.getService(
-            this, 1,
-            Intent(this, DownloadService::class.java).setAction(ACTION_CANCEL),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val pct = Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""").find(msg)?.groupValues?.get(1)?.toIntOrNull()
-        val first = msg.lineSequence().firstOrNull() ?: msg
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("VideoDroid")
-            .setContentText(first)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(open)
-            .addAction(0, "Cancel", cancel)
-        if (pct != null) {
-            builder.setProgress(100, pct, false)
-        } else {
-            builder.setProgress(0, 0, true)
+        val bigTextStyle = androidx.core.app.BigTextStyle().apply {
+            bigText = detailed
         }
-        return builder.build()
+
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).apply {
+            setContentTitle(contentTitle)
+            setContentText(contentText)
+            setSmallIcon(R.drawable.ic_launcher_foreground) // ensure icon exists
+            setContentIntent(pendingIntent)
+            setStyle(bigTextStyle)
+            setOnlyAlertOnce(true)
+        }.build()
     }
 
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < 26) return
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Downloads", NotificationManager.IMPORTANCE_LOW)
-        )
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onTaskRemoved(rootIntent: Intent) {
+        // Service is killed when task is removed, but we want it to restart
+        // on sticky mode. The pumpLoop will check database on restart.
+        ensurePump()
+        super.onTaskRemoved(rootIntent)
     }
 
     companion object {
-        const val ACTION_START = "com.xerxes.videodroid.START"
-        const val ACTION_CANCEL = "com.xerxes.videodroid.CANCEL"
-        const val EXTRA_URL = "url"
-        const val EXTRA_DLQ = "dlq"
-        const val EXTRA_HEIGHT = "height"
-        const val EXTRA_ASPECT = "aspect"
-        const val EXTRA_TRIM = "trim"
-        const val EXTRA_TSTART = "tstart"
-        const val EXTRA_TEND = "tend"
-        const val EXTRA_EXPORT = "export"
-        const val EXTRA_QV = "qv"
-        const val EXTRA_LOCAL_PATH = "localPath"
-        private const val CHANNEL_ID = "vd_dl"
-        private const val NOTIF_ID = 14
-
-        @Volatile
-        var listener: Listener? = null
-
-        fun start(ctx: Context, url: String, opts: FormatOptions, localPath: String = "") {
-            val i = Intent(ctx, DownloadService::class.java).apply {
-                action = ACTION_START
-                putExtra(EXTRA_URL, url)
-                putExtra(EXTRA_DLQ, opts.dlQuality)
-                putExtra(EXTRA_HEIGHT, opts.exportHeight)
-                putExtra(EXTRA_ASPECT, opts.aspect)
-                putExtra(EXTRA_TRIM, opts.trimEnabled)
-                putExtra(EXTRA_TSTART, opts.trimStart)
-                putExtra(EXTRA_TEND, opts.trimEnd)
-                putExtra(EXTRA_EXPORT, opts.exportEnabled)
-                putExtra(EXTRA_QV, opts.crf)
-                putExtra(EXTRA_LOCAL_PATH, localPath)
-            }
-            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
-        }
-
-        fun cancel(ctx: Context) {
-            FormatWorker.requestCancel()
-            ctx.startService(Intent(ctx, DownloadService::class.java).setAction(ACTION_CANCEL))
-        }
-
-        fun lastUriKey() = "last_result_uri"
+        const val EXTRA_URL = "extra_url"
+        const val EXTRA_LOCAL_PATH = "extra_local_path"
+        const val EXTRA_DLQ = "extra_dlq"
+        const val EXTRA_HEIGHT = "extra_height"
+        const val EXTRA_ASPECT = "extra_aspect"
+        const val EXTRA_QV = "extra_qv"
+        const val EXTRA_TRIM = "extra_trim"
+        const val EXTRA_TSTART = "extra_tstart"
+        const val EXTRA_TEND = "extra_tend"
+        const val EXTRA_EXPORT = "extra_export"
+        const val EXTRA_JOB_ID = "extra_job_id"
     }
 }

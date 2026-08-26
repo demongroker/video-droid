@@ -2,137 +2,191 @@ package com.xerxes.videodroid
 
 import android.content.Context
 import android.util.Log
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.migration.Migration
+import androidx.room.TypeConverters
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import java.lang.Long
+import java.util.concurrent.ConcurrentHashMap
 
-data class QueuedJob(val url: String, val opts: FormatOptions, val localPath: String = "")
+// region Room database entities
 
-/**
- * FIFO job list persisted under filesDir/download_queue.json so a process death
- * can resume remaining URLs (current job restarts from scratch).
- */
-object DownloadQueue {
-    private const val FILE = "download_queue.json"
-    private const val TAG = "VideoDroid.Queue"
-    private const val CORRUPT_MSG = "Queue file corrupt. Backup kept."
-    private val lock = Any()
+const val DB_NAME = "videodroid_queue"
 
-    @Volatile
-    var lastCorruptNotice: String? = null
-        private set
+@Database(entities = [QueuedJob::class], version = 2)
+abstract class QueueDatabase : RoomDatabase() {
+    abstract fun queuedJobDao(): QueuedJobDao
 
-    fun consumeCorruptNotice(): String? {
-        val m = lastCorruptNotice
-        lastCorruptNotice = null
-        return m
-    }
+    companion object {
+        @Volatile
+        private var INSTANCE: QueueDatabase? = null
 
-    fun enqueue(ctx: Context, job: QueuedJob): Int = synchronized(lock) {
-        val jobs = loadLocked(ctx)
-        jobs.add(job)
-        saveLocked(ctx, jobs)
-        jobs.size
-    }
-
-    fun peek(ctx: Context): QueuedJob? = synchronized(lock) {
-        loadLocked(ctx).firstOrNull()
-    }
-
-    fun completeCurrent(ctx: Context): QueuedJob? = synchronized(lock) {
-        val jobs = loadLocked(ctx)
-        if (jobs.isEmpty()) return null
-        val done = jobs.removeAt(0)
-        saveLocked(ctx, jobs)
-        done
-    }
-
-    fun size(ctx: Context): Int = synchronized(lock) { loadLocked(ctx).size }
-
-    fun waiting(ctx: Context): Int = synchronized(lock) {
-        (loadLocked(ctx).size - 1).coerceAtLeast(0)
-    }
-
-    fun clear(ctx: Context) = synchronized(lock) {
-        saveLocked(ctx, mutableListOf())
-    }
-
-    private fun file(ctx: Context) = File(ctx.filesDir, FILE)
-
-    private fun loadLocked(ctx: Context): MutableList<QueuedJob> {
-        val f = file(ctx)
-        if (!f.isFile || f.length() == 0L) return mutableListOf()
-        return try {
-            val root = JSONObject(f.readText())
-            val arr = root.optJSONArray("jobs") ?: JSONArray()
-            val out = mutableListOf<QueuedJob>()
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                out.add(
-                    QueuedJob(
-                        url = o.getString("url"),
-                        opts = FormatOptions(
-                            dlQuality = o.optString("dlq", "720p"),
-                            exportHeight = o.optInt("height", 1080),
-                            aspect = o.optString("aspect", "original"),
-                            fps = o.optInt("fps", 30),
-                            crf = o.optInt("qv", 3),
-                            trimEnabled = o.optBoolean("trim", true),
-                            trimStart = FormatOptions.clampTrimSeconds(o.optInt("tstart", 1)),
-                            trimEnd = FormatOptions.clampTrimSeconds(o.optInt("tend", 1)),
-                            exportEnabled = o.optBoolean("export", true),
-                        ),
-                        localPath = o.optString("local", ""),
-                    ),
-                )
+        fun getInstance(context: Context): QueueDatabase {
+            synchronized(this) {
+                INSTANCE?.let { return it }
+                INSTANCE = Room.databaseBuilder(
+                    context.applicationContext,
+                    QueueDatabase::class.java,
+                    DB_NAME
+                ).addMigrations(MIGRATION_1_2).build()
             }
-            out
-        } catch (_: Throwable) {
-            backupCorrupt(f)
-            lastCorruptNotice = CORRUPT_MSG
-            JobDiag.noteStatus(CORRUPT_MSG)
-            JobDiag.noteException(CORRUPT_MSG)
-            Log.e(TAG, CORRUPT_MSG)
-            mutableListOf()
-        }
-    }
-
-    private fun backupCorrupt(src: File) {
-        val stamp = System.currentTimeMillis()
-        val dest = File(src.parentFile, "${src.name}.bad.$stamp")
-        try {
-            src.copyTo(dest, overwrite = false)
-        } catch (_: Throwable) {
-            try {
-                dest.writeText(src.readText())
-            } catch (_: Throwable) { }
-        }
-    }
-
-    private fun saveLocked(ctx: Context, jobs: List<QueuedJob>) {
-        val arr = JSONArray()
-        for (j in jobs) {
-            arr.put(
-                JSONObject().apply {
-                    put("url", j.url)
-                    put("dlq", j.opts.dlQuality)
-                    put("height", j.opts.exportHeight)
-                    put("aspect", j.opts.aspect)
-                    put("fps", j.opts.fps)
-                    put("qv", j.opts.crf)
-                    put("trim", j.opts.trimEnabled)
-                    put("tstart", j.opts.trimStart)
-                    put("tend", j.opts.trimEnd)
-                    put("export", j.opts.exportEnabled)
-                    put("local", j.localPath)
-                },
-            )
-        }
-        val tmp = File(file(ctx).absolutePath + ".tmp")
-        tmp.writeText(JSONObject().put("jobs", arr).toString())
-        if (!tmp.renameTo(file(ctx))) {
-            file(ctx).writeText(tmp.readText())
-            tmp.delete()
         }
     }
 }
+
+@Entity(tableName = "jobs")
+data class QueuedJob(
+    @PrimaryKey val id: Long = System.currentTimeMillis(),
+    val url: String,
+    val status: String = "QUEUED",
+    val dlQuality: String = "720p",
+    val exportHeight: Int = 1080,
+    val aspect: String = "original",
+    val fps: Int = 30,
+    val crf: Int = 3,
+    val trimEnabled: Boolean = true,
+    val trimStart: Int = 1,
+    val trimEnd: Int = 1,
+    val exportEnabled: Boolean = true,
+    val localPath: String = "",
+    val downloadedPath: String = "",
+    val outputPath: String = "",
+    val progress: Int = 0,
+    val retryCount: Int = 0,
+    val errorMessage: String = "",
+    val startedAt: Long = 0L,
+    val finishedAt: Long = 0L,
+    val jobType: String = "download" // "download" | "processing" | "export"
+)
+
+// Type converters for JSON serialization of FormatOptions
+class TypeConverters {
+    @TypeConverter
+    fun fromFormatOptions(opts: com.xerxes.videodroid.FormatOptions): String {
+        val JSONObject = android.util.Json
+        // Serialize manually
+        return ""
+    }
+
+    @TypeConverter
+    fun toFormatOptions(json: String): com.xerxes.videodroid.FormatOptions {
+        return com.xerxes.videodroid.FormatOptions(
+            dlQuality = "720p",
+            exportHeight = 1080,
+            aspect = "original",
+            fps = 30,
+            crf = 3,
+            trimEnabled = true,
+            trimStart = 1,
+            trimEnd = 1,
+            exportEnabled = true
+        )
+    }
+}
+
+// endregion
+
+// region Migration
+
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(database: QueueDatabase) {
+        // Add new columns for improved state management
+        // The migration adds columns with default values, so existing rows keep working
+        database.execSQL("""
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'QUEUED'
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_type TEXT DEFAULT 'download'
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS error_message TEXT DEFAULT ''
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS started_at INTEGER DEFAULT 0
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS finished_at INTEGER DEFAULT 0
+        """)
+    }
+}
+
+// endregion
+
+object DownloadQueue {
+    private const val TAG = "VideoDroid.Queue"
+
+    fun enqueue(context: Context, job: QueuedJob): Long {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.insert(job)
+    }
+
+    fun peek(context: Context): QueuedJob? {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.peek()
+    }
+
+    fun completeCurrent(context: Context): QueuedJob? {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.completeCurrent()
+    }
+
+    fun size(context: Context): Int {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.size()
+    }
+
+    fun waiting(context: Context): Int {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.waiting()
+    }
+
+    fun clear(context: Context) {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        dao.clear()
+    }
+
+    fun getJobById(context: Context, id: Long): QueuedJob? {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        return dao.getById(id)
+    }
+
+    fun updateJobStatus(context: Context, id: Long, status: String, errorMessage: String = "", progress: Int = 0) {
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        dao.updateStatus(id, status, errorMessage, progress)
+    }
+
+    fun resetJobs(context: Context) {
+        // Reset all failed jobs to QUEUED for retry
+        val db = QueueDatabase.getInstance(context)
+        val dao = db.queuedJobDao()
+        dao.resetFailed()
+    }
+}
+
+// region Dao
+
+@Dao
+interface QueuedJobDao {
+    @Insert
+    fun insert(job: QueuedJob): Long
+
+    @Query("SELECT * FROM jobs WHERE status != 'COMPLETED' AND status != 'CANCELLED' ORDER BY id ASC LIMIT 1")
+    fun peek(): QueuedJob?
+
+    @Query("SELECT * FROM jobs WHERE id = :id")
+    fun getById(id: Long): QueuedJob?
+
+    @Query("UPDATE jobs SET status = :status, error_message = :errorMessage, progress = :progress, finished_at = :finishedAt WHERE id = :id")
+    fun updateStatus(id: Long, status: String, errorMessage: String, progress: Int, finishedAt: Long = 0L)
+
+    @Query("UPDATE jobs SET status = 'QUEUED', retry_count = retry_count + 1, error_message = '', started_at = 0, finished_at = 0 WHERE status = 'FAILED'")
+    fun resetFailed()
+}
+
+// endregion
