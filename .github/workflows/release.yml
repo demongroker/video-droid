@@ -138,13 +138,33 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      # The in-app updater reads the checksum from the release body, so the
+      # body must always carry a literal "SHA-256: <hex>" line.
+      - name: Write release body (checksum contract)
+        run: |
+          set -euo pipefail
+          cd dist
+          APK=$(ls *.apk | head -1)
+          HASH=$(awk '{print $1}' "${APK}.sha256")
+          {
+            echo "VideoDroid ${{ github.ref_name }}"
+            echo ""
+            echo "SHA-256: ${HASH}"
+            echo ""
+            echo "Asset: \`${APK}\` (+ \`.sha256\`)."
+            echo ""
+            echo "Full changelog: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md)"
+          } > release-body.md
+          cat release-body.md
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: VideoDroid ${{ github.ref_name }}
           draft: false
-          generate_release_notes: true
+          body_path: dist/release-body.md
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
