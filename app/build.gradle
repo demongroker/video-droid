@@ -24,10 +24,18 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("../videodroid.keystore")
-            storePassword project.findProperty("RELEASE_STORE_PASSWORD") ?: "debug"
-            keyAlias "videodroid"
-            keyPassword project.findProperty("RELEASE_KEY_PASSWORD") ?: "debug"
+            // Only wire up signing when the keystore is actually present.
+            // CI measures an UNSIGNED release APK for size validation; tag
+            // builds provide the real keystore via secrets.
+            def ksFile = rootProject.file("videodroid.keystore")
+            if (ksFile.exists()) {
+                storeFile ksFile
+                storePassword project.findProperty("RELEASE_STORE_PASSWORD")
+                    ?: System.getenv("RELEASE_STORE_PASSWORD") ?: "debug"
+                keyAlias "videodroid"
+                keyPassword project.findProperty("RELEASE_KEY_PASSWORD")
+                    ?: System.getenv("RELEASE_KEY_PASSWORD") ?: "debug"
+            }
         }
     }
     buildTypes {
@@ -38,7 +46,10 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            // Leave unsigned when no keystore is configured (CI size check).
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     buildFeatures {

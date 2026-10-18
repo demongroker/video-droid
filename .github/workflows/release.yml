@@ -72,12 +72,21 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > videodroid.keystore
           test -s videodroid.keystore
 
-      # PR / branch builds: compile check only, no signing secrets needed.
-      - name: Build debug (PR / branch)
+      # PR / branch builds: compile check + APK size report. No signing
+      # secrets needed — the release APK is built unsigned when no keystore
+      # is present, which is what we want for a size comparison.
+      - name: Build debug + release (PR / branch)
         if: "!startsWith(github.ref, 'refs/tags/')"
         run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
+          echo "=== APK sizes ==="
+          for f in $(find app/build/outputs/apk -name '*.apk'); do
+            SZ=$(stat -c%s "$f")
+            MB=$(awk -v s="$SZ" 'BEGIN{printf "%.1f", s/1048576}')
+            echo "$f -> $SZ bytes ($MB MB)"
+          done
 
       # Tag builds: signed release for the store/release asset.
       - name: Build signed release APK
