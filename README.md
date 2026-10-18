@@ -5,6 +5,24 @@ Download. yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
 Current release: **1.6.28** (versionCode 55).
 
+## Screens and controls
+
+Keep this map current whenever a screen, control or gesture changes.
+
+| Screen | How to reach it | Main controls |
+|---|---|---|
+| **Download** | app icon, or the Download tab | Link field, quality spinner (4K/1080p/720p/480p), Local video, Export switch, More section (Library, Changelog, Copy log, Check update, Login X, Clear login), social preset chips, Recommended / My last, Go, Cancel current, status + progress card |
+| **Queue** | bottom bar | Pending jobs (head first), Clear (empties the queue and cancels the run) |
+| **Library** | bottom bar, or More → Library | Finished downloads from `Download/VideoDroid`, newest first; tap a row to play (falls back to a share chooser) |
+| **Share sheet** | share a link from any app to VideoDroid | Quality toggle (4K/1080p/720p/480p), convert-for-social switch, Download / Cancel |
+| **Open page** | "Open page" after a failed job | Loads the page in a WebView so a direct media URL can be picked |
+| **Login X** | More → Login X | Signs into X inside a WebView; cookies are kept for authenticated downloads |
+
+Theme: `Theme.Material3.DayNight.NoActionBar`, dynamic colour on Android 12+
+(`DynamicColors.applyToActivitiesIfAvailable`), indigo `#3949AB` fallback,
+night palette in `values-night/`. Every screen calls `Insets.applyTo()` so
+content stays out of the system bars.
+
 ## How to use
 
 Recommended: **1080p** + **Original** + trim **Off**.

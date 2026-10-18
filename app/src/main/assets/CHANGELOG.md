@@ -2,6 +2,24 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.0 (versionCode 58)
+
+Phase 3 — Material 3 refresh. Still XML views, no Compose, no Hilt.
+
+- **Edge-to-edge fixed.** targetSdk 36 draws behind the status bar and the
+  gesture pill, so the title sat under the status bar. Every screen now pads by
+  the system-bar + display-cutout insets.
+- **Dynamic colour + dark palette.** Material You wallpaper palettes on
+  Android 12+; indigo `#3949AB` fallback below that, with a real night palette.
+- **Library screen.** Finished downloads, read back from
+  `Download/VideoDroid`, newest first, tap to play.
+- **Three-tab bottom navigation.** Download / Queue / Library; Queue lists the
+  pending jobs and can clear them.
+- **Share bottom sheet.** Sharing a link opens a quality
+  (4K / 1080p / 720p / 480p) and convert-for-social picker before queuing.
+- **Progress card.** Status + progress grouped in a Material 3 card that
+  follows the dynamic palette.
+
 ## 1.8.0 (versionCode 57)
 
 Phase 2 — architecture, queue durability and toolchain.
