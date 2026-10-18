@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         // targetSdk 36 = enforced edge-to-edge; keep content out of the bars.
-        Insets.applyTo(findViewById(R.id.mainScroll))
+        Insets.applyTo(findViewById(R.id.mainWrapper))
 
         urlInput = findViewById(R.id.urlInput)
         dlQuality = findViewById(R.id.dlQuality)
@@ -110,6 +110,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         presetsExpanded = findViewById(R.id.presetsExpanded)
         hideJobProgress()
         collapsePresets()
+        NavHelper.wire(this, R.id.tab_download)
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 vm.state.collect { render(it) }
