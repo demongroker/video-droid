@@ -4,7 +4,6 @@ local.properties
 videodroid.keystore
 *.jks
 *.keystore
-gradle.properties
 *.iml
 *.apk
 *.aab

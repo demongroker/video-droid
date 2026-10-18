@@ -21,13 +21,9 @@ Private phone app. Updates: public GitHub Releases (no token in the APK).
 
 - **Export H.264-REQUIRED**: Export downloads now use AVC-only format (`bv*[vcodec^=avc1][height<=1080]+ba/...`) with **no any-codec fallback**. If the video is HEVC-only, the download fails fast with a clear message instead of grabbing 676 MB of undecodable HEVC. Export-OFF and 1080/720/480 presets unchanged.
 
-## 1.6.21 (versionCode 48)
-
-- Fix 1.6.20 regression: convert never started after download. Removed re-export feature (persistSource/lastSourceOrNull) which caused the encode path to stall. Local video picker and H.264-only encode unaffected.
-
 ## 1.6.22 (versionCode 49)
 
-- Fix HEVC/H.265 input: encode now uses **hardware decode** (`-hwaccel mediacodec -hwaccel_output_format nv12`) before the input file, so h264_mediacodec no longer fails with "Invalid data found when processing input" on H.265 downloads. Encode path outputs NV12 (`-pix_fmt nv12`) for the MediaCodec encoder. Copy/remux path untouched, still pure stream copy.
+- Fix HEVC/H.265 input: encode uses **hardware decode** (`-hwaccel mediacodec -hwaccel_output_format yuv420p`) before the input file, so h264_mediacodec no longer fails with "Invalid data found when processing input" on H.265 downloads. The output pixel format is **yuv420p**, not nv12 — NV12 is not universally playable and breaks crop filters. Copy/remux path untouched, still pure stream copy.
 
 ## 1.6.21 (versionCode 48)
 

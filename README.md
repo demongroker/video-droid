@@ -3,20 +3,22 @@
 Phone-only Android video downloader. Paste or share a link, pick quality, tap
 Download. yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
-Current release: **1.6.20** (versionCode 47).
+Current release: **1.6.28** (versionCode 55).
 
 ## How to use
 
-Recommended: **best** + **Original** + trim **Off**.
+Recommended: **1080p** + **Original** + trim **Off**.
 
-- **best** is 1080-capped. There is a separate **4K** option. 1080 / 720 / 480
-  stay available.
+- Quality is **4K / 1080p / 720p / 480p** (1080p is the default). The old
+  "best" option is gone; social presets all default to 1080p.
 - **Export Off:** save the original file only. Fill / Fit / ratio / trim are
   hidden. FFmpeg is skipped.
 - **Export On:** encode with **Fill** (crop) or **Fit** (pad). Trim is only
   available when Export is On (defaults 1s / 1s).
 - Encode quality: h264_mediacodec **16M** / **24M** (≥1080), bufsize 2×
-  (32M / 48M). **H.264 + AAC only.** No mpeg4 fallback (X rejects MPEG-4 Part 2).
+  (32M / 48M). **H.264 + AAC** for X-uploadable output; if h264_mediacodec
+  rejects a source, a 4th **mpeg4** software fallback still produces a
+  playable MP4 (plays on the phone, but is not X-uploadable).
 - Fill/Fit remuxes to MP4 first when the container is not clean MP4; if decode
   fails, remux then pad/crop again.
 - Failures show a short reason plus **Open page** (in-app WebView; last job
@@ -33,7 +35,7 @@ presets. Each preset tap overrides all settings and persists:
 
 | Preset | Settings |
 |---|---|
-| X | Export On, best, Fit, Portrait 9:16, trim Off |
+| X | Export On, 1080p, Fit, Portrait 9:16, trim Off |
 | TikTok / Shorts / Reels | Fill 9:16 |
 | YouTube | Original |
 | Instagram | Fill 4:5 |

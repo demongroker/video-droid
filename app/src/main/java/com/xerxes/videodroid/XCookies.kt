@@ -63,10 +63,35 @@ object XCookies {
         return f.length() > 0
     }
 
+    /**
+     * Clear only the X / Twitter session — never the whole WebView cookie jar.
+     * The old implementation called removeAllCookies(), which also wiped any
+     * other site the user had signed into inside the app.
+     */
     fun clear(context: Context) {
         file(context).delete()
         val cm = CookieManager.getInstance()
-        cm.removeAllCookies(null)
+        val urls = listOf(
+            "https://x.com/",
+            "https://www.x.com/",
+            "https://mobile.x.com/",
+            "https://twitter.com/",
+            "https://www.twitter.com/",
+            "https://mobile.twitter.com/",
+            "https://api.x.com/",
+            "https://api.twitter.com/",
+        )
+        for (url in urls) {
+            val raw = cm.getCookie(url) ?: continue
+            for (part in raw.split(";")) {
+                val eq = part.indexOf('=')
+                if (eq <= 0) continue
+                val name = part.substring(0, eq).trim()
+                if (name.isEmpty()) continue
+                // Expire the cookie in place; everything else stays untouched.
+                cm.setCookie(url, "$name=; Max-Age=0; Path=/; Secure")
+            }
+        }
         cm.flush()
     }
 

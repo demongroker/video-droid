@@ -361,7 +361,7 @@ object FormatWorker {
                 return FormatResult(false, msg, uri)
             }
             if (session == null) {
-                return keepDownloaded("Could not decode this video on this phone (even mpeg4 fallback). Try quality 1080 (H.264) instead of best (HEVC).")
+                return keepDownloaded("Could not decode this video on this phone (even the mpeg4 fallback). Try a 1080p H.264 source instead of a 4K/HEVC one.")
             }
             val done = session ?: return keepDownloaded("FFmpeg produced no output")
             if (!ReturnCode.isSuccess(done.returnCode)) {
@@ -657,8 +657,45 @@ object FormatWorker {
         return if (sb.isEmpty()) "video" else sb.toString()
     }
 
+    /** OPT-VIDEODROID-006: build a sortable, identifiable base name. */
+    private fun fileNameBase(opts: FormatOptions, title: String?): String {
+        val raw = title.orEmpty()
+        val idMatch = Regex("\\[(\\d{10,25})\\]").find(raw)
+        val tail = "${qualityTag(opts)}_${aspectFileTag(opts)}"
+        if (idMatch == null) {
+            // not a tweet-style name: unchanged behaviour, just sanitised
+            return "${shortTitle(title)}_$tail"
+        }
+        val statusId = idMatch.groupValues[1]
+        val head = raw.substring(0, idMatch.range.first).trim().trimEnd('-', '_', ' ')
+        val parts = head.split("_-_", limit = 2)
+        val account = shortTitle(parts.getOrNull(0)?.trim()?.trimStart('@'))
+        val text = shortTitle(parts.getOrNull(1)?.trim())
+        val date = tweetDate(statusId)
+        val sid = statusId.takeLast(6)
+        return listOf(account, date, sid, text).filter { it.isNotBlank() && it != "video" }.joinToString("_") + "_" + tail
+    }
+
+    /** OPT-VIDEODROID-006: a Twitter status id is a snowflake — ms since 2010-11-04. */
+    private fun tweetDate(statusId: String): String {
+        return try {
+            val ms = statusId.toLongOrNull()?.shr(22) ?: return ""
+            val epoch = 1288834974657L + ms
+            val fmt = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+            fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            fmt.format(java.util.Date(epoch))
+        } catch (e: Throwable) {
+            ""
+        }
+    }
+
     fun fileName(opts: FormatOptions, ext: String, title: String? = null): String {
-        val base = "${shortTitle(title)}_${qualityTag(opts)}_${aspectFileTag(opts)}"
+        // OPT-VIDEODROID-006: identifiable + sortable. Kept INSIDE the existing
+        // function so no call site changes and nothing else is rewritten.
+        // For X/Twitter the title is "<account>_-_<post text>-[<status id>]": pull it
+        // apart so account, post date and a short stable id lead the name instead of
+        // a single word. Non-tweet titles keep exactly the old behaviour.
+        val base = fileNameBase(opts, title)
         val destDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             "VideoDroid",
