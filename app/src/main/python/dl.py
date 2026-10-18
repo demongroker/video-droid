@@ -436,6 +436,10 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
         "noprogress": True,
         "retries": 3,
         "fragment_retries": 3,
+        # Keep the .part file and resume it on retry/restart instead of
+        # restarting the transfer from zero (where the server allows ranges).
+        "continuedl": True,
+        "nopart": False,
         "socket_timeout": 8,
         "progress_hooks": [_hook],
         "merge_output_format": "mp4",

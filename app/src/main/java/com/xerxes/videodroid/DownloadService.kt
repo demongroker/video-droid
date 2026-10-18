@@ -29,7 +29,13 @@ class DownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onDestroy() {
+        isRunning = false
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isRunning = true
         when (intent?.action) {
             ACTION_CANCEL -> {
                 FormatWorker.requestCancel()
@@ -206,6 +212,10 @@ class DownloadService : Service() {
     }
 
     companion object {
+        /** True while a job is in flight; read by QueueResumeWorker. */
+        @Volatile
+        var isRunning: Boolean = false
+
         const val ACTION_START = "com.xerxes.videodroid.START"
         const val ACTION_CANCEL = "com.xerxes.videodroid.CANCEL"
         const val EXTRA_URL = "url"

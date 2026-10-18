@@ -268,6 +268,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
 
         maybeAskIgnoreBattery()
+        // If a job was still queued when the process died (or the app was
+        // updated), WorkManager re-launches the service to finish it.
+        QueueResumeWorker.schedule(this)
         handleIncomingShare(intent, enqueueIfBusy = true)
 
         if (Build.VERSION.SDK_INT < 29) {
