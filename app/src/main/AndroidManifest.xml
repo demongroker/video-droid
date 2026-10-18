@@ -43,6 +43,10 @@
             android:name=".OpenPageActivity"
             android:exported="false"
             android:label="Open page" />
+        <activity
+            android:name=".LibraryActivity"
+            android:exported="false"
+            android:label="Library" />
         <service
             android:name=".DownloadService"
             android:exported="false"

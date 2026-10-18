@@ -126,6 +126,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
+        findViewById<Button>(R.id.libraryButton).setOnClickListener {
+            collapsePresets()
+            startActivity(Intent(this, LibraryActivity::class.java))
+        }
         findViewById<Chip>(R.id.presetX).setOnClickListener {
             applySocialPreset("X", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Portrait 9:16")
         }
