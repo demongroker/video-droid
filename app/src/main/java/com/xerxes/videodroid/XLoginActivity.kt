@@ -2,6 +2,7 @@ package com.xerxes.videodroid
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import com.xerxes.videodroid.ui.Insets
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -22,6 +23,7 @@ class XLoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_x_login)
+        Insets.applyTo(findViewById(R.id.xLoginRoot))
 
         web = findViewById(R.id.xWebView)
         hint = findViewById(R.id.xLoginHint)
