@@ -165,6 +165,8 @@ jobs:
           name: VideoDroid ${{ github.ref_name }}
           draft: false
           body_path: dist/release-body.md
-          files: dist/*
+          files: |
+            dist/*.apk
+            dist/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
