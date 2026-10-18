@@ -2,6 +2,22 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.8.0 (versionCode 57)
+
+Phase 2 — architecture, queue durability and toolchain.
+
+- **Screen logic moved into a ViewModel** (`ui/MainViewModel`): job state,
+  queue counts, progress, last result and last failed URL now live in a
+  `StateFlow`, and background work runs on `viewModelScope` instead of raw
+  `Thread`s. No visual changes.
+- **The download queue now survives restarts and updates.** `QueueResumeWorker`
+  (WorkManager) re-launches the drain after a process death; `QueueResumeReceiver`
+  re-arms it on boot and after an app update; `dl.py` keeps the `.part` file
+  (`continuedl`) so an interrupted transfer resumes instead of restarting.
+- **Toolchain**: compileSdk/targetSdk 36, AGP 8.9.2, Gradle 8.11.1,
+  Kotlin 2.0.21 (Compose compiler Gradle plugin), AndroidX libraries current.
+  minSdk stays 24.
+
 ## 1.7.0 (versionCode 56)
 
 Phase 1 — hardening, CI and size.
