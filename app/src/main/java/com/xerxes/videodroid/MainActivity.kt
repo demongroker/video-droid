@@ -44,7 +44,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.regex.Pattern
 
-class MainActivity : AppCompatActivity(), DownloadService.Listener {
+class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFragment.Listener {
 
     private lateinit var urlInput: EditText
     private lateinit var dlQuality: Spinner
@@ -352,8 +352,13 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             applyAspectModeUi()
             suppressPersist = false
         }
-        if (enqueueIfBusy && (vm.state.value.busy || DownloadQueue.size(this) > 0) && url.isNotBlank()) {
-            launchJob(url)
+        // Let the user pick quality/format before anything is queued.
+        if (url.isNotBlank()) {
+            showShareSheet(
+                url,
+                dlQuality.selectedItem?.toString() ?: "1080p",
+                exportSwitch.isChecked,
+            )
         }
     }
 
@@ -750,6 +755,17 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     override fun onStatus(msg: String) {
         vm.onServiceStatus(msg)
+    }
+
+    /** Result of the share bottom sheet: apply the pick, then queue. */
+    override fun onShareConfirmed(url: String, quality: String, exportOn: Boolean) {
+        suppressPersist = true
+        selectValue(dlQuality, quality)
+        exportSwitch.isChecked = exportOn
+        applyExportUi(exportOn)
+        suppressPersist = false
+        persistCurrent(custom = true)
+        launchJob(url)
     }
 
     override fun onFinished(result: FormatResult) {
