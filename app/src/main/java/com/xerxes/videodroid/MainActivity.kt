@@ -26,10 +26,18 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.xerxes.videodroid.ui.JobSettings
+import com.xerxes.videodroid.ui.MainUiState
+import com.xerxes.videodroid.ui.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import java.io.File
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -59,11 +67,17 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     private lateinit var status: TextView
     private lateinit var presetsToggle: MaterialButton
     private lateinit var presetsExpanded: ChipGroup
-    private var busy = false
-    private var lastResultUri: Uri? = null
     private var pendingStart = false
     private var suppressPersist = false
-    private var lastFailUrl: String? = null
+
+    private val vm: MainViewModel by lazy {
+        ViewModelProvider(this)[MainViewModel::class.java]
+    }
+
+    /** Single source of truth for the status line; mirrored into the TextView. */
+    private var statusText: String
+        get() = vm.state.value.statusText
+        set(value) = vm.setStatus(value)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,13 +107,18 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         presetsExpanded = findViewById(R.id.presetsExpanded)
         hideJobProgress()
         collapsePresets()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                vm.state.collect { render(it) }
+            }
+        }
 
         findViewById<Button>(R.id.loginXButton).setOnClickListener {
             startActivity(Intent(this, XLoginActivity::class.java))
         }
         findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
             XCookies.clear(this)
-            status.text = "X login cleared"
+            statusText = "X login cleared"
         }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
@@ -164,7 +183,6 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         trimStart.setText(readTrimPref(prefs, KEY_TRIM_START).toString())
         trimEnd.setText(readTrimPref(prefs, KEY_TRIM_END).toString())
         suppressPersist = false
-        lastFailUrl = OpenPageActivity.loadJobUrl(this).ifEmpty { null }
         applyExportUi(exportSwitch.isChecked)
         applyAspectModeUi()
         applyTrimOnOff(trimSwitch.isChecked)
@@ -237,7 +255,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         })
 
         status.setOnClickListener {
-            val uri = lastResultUri ?: return@setOnClickListener
+            val uri = vm.state.value.resultUri ?: return@setOnClickListener
             try {
                 val view = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, "video/mp4")
@@ -245,7 +263,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
                 }
                 startActivity(view)
             } catch (_: Throwable) {
-                status.text = "Could not open file"
+                statusText = "Could not open file"
             }
         }
 
@@ -259,20 +277,20 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             }
         }
 
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val pkg = packageManager.getPackageInfo(packageName, 0)
-                UpdateChecker.check(this, pkg.versionName ?: "0.0", userInitiated = false)
+                UpdateChecker.check(this@MainActivity, pkg.versionName ?: "0.0", userInitiated = false)
             } catch (_: Throwable) { }
-        }.start()
+        }
     }
 
-    fun jobIsRunning(): Boolean = busy || DownloadQueue.size(this) > 0
+    fun jobIsRunning(): Boolean = vm.state.value.busy || DownloadQueue.size(this) > 0
 
     fun showUpdateStatus(msg: String) {
         runOnUiThread {
             Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-            if (!jobIsRunning()) status.text = msg
+            if (!jobIsRunning()) statusText = msg
         }
     }
 
@@ -280,31 +298,22 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         if (jobIsRunning()) {
             Toast.makeText(this, "Checking update…", Toast.LENGTH_SHORT).show()
         } else {
-            status.text = "Checking update…"
+            statusText = "Checking update…"
         }
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val pkg = packageManager.getPackageInfo(packageName, 0)
-                UpdateChecker.check(this, pkg.versionName ?: "0.0", userInitiated = true)
+                UpdateChecker.check(this@MainActivity, pkg.versionName ?: "0.0", userInitiated = true)
             } catch (t: Throwable) {
-                showUpdateStatus("Update check failed: ${t.javaClass.simpleName}")
+                runOnUiThread { showUpdateStatus("Update check failed: ${t.javaClass.simpleName}") }
             }
-        }.start()
+        }
     }
 
     override fun onStart() {
         super.onStart()
         DownloadService.listener = this
-        val q = DownloadQueue.size(this)
-        val corrupt = DownloadQueue.consumeCorruptNotice()
-        if (corrupt != null) {
-            status.text = corrupt
-        } else if (q > 0) {
-            setBusy(true)
-            val wait = DownloadQueue.waiting(this)
-            status.text = if (wait > 0) "Queued ($wait)\nWorking..." else "Working..."
-            hideJobProgress()
-        }
+        vm.refreshFromQueue()
     }
 
     override fun onStop() {
@@ -331,7 +340,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
             applyAspectModeUi()
             suppressPersist = false
         }
-        if (enqueueIfBusy && (busy || DownloadQueue.size(this) > 0) && url.isNotBlank()) {
+        if (enqueueIfBusy && (vm.state.value.busy || DownloadQueue.size(this) > 0) && url.isNotBlank()) {
             launchJob(url)
         }
     }
@@ -365,35 +374,13 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         try {
             startActivityForResult(i, REQ_LOCAL_VIDEO)
         } catch (_: Throwable) {
-            status.text = "No file picker available"
-        }
-    }
-
-    /** Copy a SAF content:// video into app storage so FFmpeg can read it. */
-    private fun copyToAppStorage(uri: Uri): File? {
-        return try {
-            val mime = contentResolver.getType(uri) ?: "video/mp4"
-            val ext = when {
-                mime.contains("quicktime") -> "mov"
-                mime.contains("webm") -> "webm"
-                mime.contains("mkv") -> "mkv"
-                mime.contains("mp2t") -> "ts"
-                mime.contains("avi") -> "avi"
-                else -> "mp4"
-            }
-            val dest = File(filesDir, "local_input.$ext")
-            contentResolver.openInputStream(uri)?.use { ins ->
-                dest.outputStream().use { outs -> ins.copyTo(outs) }
-            }
-            if (dest.exists() && dest.length() > 0) dest else null
-        } catch (_: Throwable) {
-            null
+            statusText = "No file picker available"
         }
     }
 
     private fun start() {
         val url = urlInput.text.toString().trim()
-        if (url.isEmpty()) { status.text = "Paste a link or pick a local video"; return }
+        if (url.isEmpty()) { statusText = "Paste a link or pick a local video"; return }
 
         if (Build.VERSION.SDK_INT >= 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -428,22 +415,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
         if (requestCode == REQ_LOCAL_VIDEO && resultCode == Activity.RESULT_OK) {
             val uri = data?.data ?: return
-            status.text = "Reading local video…"
-            Thread {
-                val f = copyToAppStorage(uri)
-                runOnUiThread {
-                    if (f != null) {
-                        launchJob("", f.absolutePath)
-                    } else {
-                        status.text = "Could not read that video"
-                    }
-                }
-            }.start()
+            vm.importLocalVideo(uri) { path ->
+                if (path != null) launchJob("", path)
+            }
         }
     }
 
     private fun launchJob(url: String, localPath: String? = null) {
-        if (url.isEmpty() && localPath.isNullOrBlank()) { status.text = "Paste a link or pick a video"; return }
+        if (url.isEmpty() && localPath.isNullOrBlank()) { statusText = "Paste a link or pick a video"; return }
 
         val dlQ = dlQuality.selectedItem.toString()
         val exportOn = exportSwitch.isChecked
@@ -461,16 +440,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
         persistCurrent(custom = false)
 
-        val opts = FormatOptions(dlQ, 0, aspect, 0, 3, trimOn, tStart, tEnd, exportOn)
-                lastResultUri = null
-                lastFailUrl = url
-                if (url.isNotEmpty()) OpenPageActivity.storeJobUrl(this, url)
-                openPageButton.visibility = View.GONE
-                setBusy(true)
-                val already = DownloadQueue.size(this)
-                status.text = if (already > 0) "Queued (${already})\\nStarting..." else "Starting..."
-                hideJobProgress()
-                DownloadService.start(this, url, opts, localPath.orEmpty())
+        vm.startJob(
+            url = url,
+            localPath = localPath,
+            settings = JobSettings(dlQ, exportOn, aspect, trimOn, tStart, tEnd),
+        )
     }
 
     private fun persistCurrent(custom: Boolean) {
@@ -537,8 +511,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private fun clearRecommendedNotice() {
         if (suppressPersist) return
-        val t = status.text?.toString() ?: return
-        if (t.startsWith("Recommended:")) status.text = ""
+        val t = vm.state.value.statusText
+        if (t.startsWith("Recommended:")) statusText = ""
     }
 
     private fun applyRecommended() {
@@ -551,7 +525,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         applyTrimOnOff(false)
         suppressPersist = false
         persistCurrent(custom = false)
-        status.text = "Recommended: 1080p / original / trim off"
+        statusText = "Recommended: 1080p / original / trim off"
     }
 
     private fun applyMyLast() {
@@ -566,7 +540,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         persistCurrent(custom = false)
         applyExportUi(exportSwitch.isChecked)
         applyAspectModeUi()
-        status.text = "Restored your last settings"
+        statusText = "Restored your last settings"
     }
 
     private fun applySocialPreset(name: String, exportOn: Boolean, quality: String, mode: String, ratio: String) {
@@ -583,7 +557,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         persistCurrent(custom = true)
         clearRecommendedNotice()
         if (!jobIsRunning()) {
-            status.text = "$name: $quality / $mode${if (mode == "Original") "" else " $ratio"} / trim off"
+            statusText = "$name: $quality / $mode${if (mode == "Original") "" else " $ratio"} / trim off"
         } else {
             Toast.makeText(this, "$name preset applied", Toast.LENGTH_SHORT).show()
         }
@@ -630,7 +604,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
             collapsePresets()
             XCookies.clear(this)
-            status.text = "X login cleared"
+            statusText = "X login cleared"
         }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener {
             collapsePresets()
@@ -689,10 +663,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     }
 
     private fun cancelJob() {
-        status.text = "Cancelling..."
-        hideJobProgress()
-        openPageButton.visibility = View.GONE
-        DownloadService.cancel(this)
+        vm.cancel()
     }
 
     private fun applyTrimOnOff(on: Boolean) {
@@ -711,7 +682,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         refreshGoButton()
     }
 
-    private fun queueBusy(): Boolean = busy || DownloadQueue.size(this) > 0
+    private fun queueBusy(): Boolean = vm.state.value.busy || DownloadQueue.size(this) > 0
 
     private fun refreshGoButton() {
         goButton.text = when {
@@ -721,30 +692,27 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         }
     }
 
-    private fun setBusy(on: Boolean) {
-        busy = on
+    /** Single place that pushes ViewModel state into the widgets. */
+    private fun render(s: MainUiState) {
+        if (status.text?.toString() != s.statusText) status.text = s.statusText
         goButton.isEnabled = true
-        refreshGoButton()
-        cancelButton.visibility = if (on) View.VISIBLE else View.GONE
-        if (!on) hideJobProgress()
-    }
-
-    /** Honest bar: real N% only. Never invent 1%. Indeterminate if Downloading/Converting/Trimming with no %. */
-    private fun bindJobProgress(msg: String) {
-        val active = msg.contains("Downloading") ||
-            msg.contains("Converting") ||
-            msg.contains("Trimming")
-        if (!active) {
+        goButton.text = when {
+            s.busy -> "Add to queue"
+            exportSwitch.isChecked -> "Download & Convert"
+            else -> "Download"
+        }
+        cancelButton.visibility = if (s.busy) View.VISIBLE else View.GONE
+        openPageButton.visibility = if (s.openFailedVisible) View.VISIBLE else View.GONE
+        if (!s.progressVisible) {
             hideJobProgress()
             return
         }
-        val pct = JOB_PCT_RE.find(msg)?.groupValues?.get(1)?.toIntOrNull()
         jobProgress.visibility = View.VISIBLE
-        if (pct != null && pct in 0..100) {
-            if (jobProgress.isIndeterminate) jobProgress.isIndeterminate = false
-            jobProgress.setProgressCompat(pct, true)
-        } else {
+        if (s.progressIndeterminate || s.progressPercent == null) {
             jobProgress.isIndeterminate = true
+        } else {
+            if (jobProgress.isIndeterminate) jobProgress.isIndeterminate = false
+            jobProgress.setProgressCompat(s.progressPercent, true)
         }
     }
 
@@ -757,7 +725,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
 
     private fun openFailedPage() {
         val url = sequenceOf(
-            lastFailUrl.orEmpty(),
+            vm.state.value.lastFailUrl.orEmpty(),
             OpenPageActivity.loadJobUrl(this),
             urlInput.text.toString().trim(),
         ).map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
@@ -769,37 +737,17 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     }
 
     override fun onStatus(msg: String) {
-        runOnUiThread {
-            status.text = msg
-            bindJobProgress(msg)
-        }
+        vm.onServiceStatus(msg)
     }
 
     override fun onFinished(result: FormatResult) {
-        runOnUiThread {
-            val remaining = DownloadQueue.size(this)
-            setBusy(remaining > 0)
-            val prefix = if (remaining > 0) {
-                val w = DownloadQueue.waiting(this)
-                if (w > 0) "Queued ($w)\n" else ""
-            } else ""
-            if (result.ok && result.uri != null) {
-                lastResultUri = result.uri
-                lastFailUrl = null
-                OpenPageActivity.clearJobUrl(this)
-                openPageButton.visibility = View.GONE
-                status.text = prefix + "Saved. Tap to open\n${result.uri}"
-                // Persist last output for re-export reference
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putString(KEY_LAST_OUTPUT, result.uri.toString()).apply()
-            } else {
-                lastResultUri = null
-                val cancelled = result.message.equals("Cancelled", ignoreCase = true)
-                status.text = prefix + result.message
-                openPageButton.visibility = if (cancelled || remaining > 0) View.GONE else View.VISIBLE
-            }
-            hideJobProgress()
+        if (result.ok && result.uri != null) {
+            OpenPageActivity.clearJobUrl(this)
+            // Persist last output for re-export reference
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST_OUTPUT, result.uri.toString()).apply()
         }
+        vm.onServiceFinished(result)
     }
 
     private fun copyLog() {
@@ -831,7 +779,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         lines.add("export: ${if (exportOn) "on" else "off"}  quality: $quality  aspect: $aspect")
         lines.add("trim: ${if (trimOn) "on" else "off"}  start=${tStart}s  end=${tEnd}s")
         lines.add("queue size: $qSize")
-        lines.add("current: ${JobDiag.redact(status.text?.toString() ?: JobDiag.lastStatusLine)}")
+        lines.add("current: ${JobDiag.redact(vm.state.value.statusText.ifEmpty { JobDiag.lastStatusLine })}")
         lines.add("")
         lines.add("last statuses:")
         val hist = JobDiag.lastStatuses(30)
@@ -846,7 +794,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
         val blob = JobDiag.redact(lines.joinToString("\n"))
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("videodroid-log", blob))
-        status.text = "Log copied"
+        statusText = "Log copied"
     }
 
     private fun readTrimPref(prefs: android.content.SharedPreferences, key: String): Int {
