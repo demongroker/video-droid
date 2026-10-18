@@ -66,7 +66,13 @@ android {
 chaquopy {
     defaultConfig {
         version "3.12"
-        buildPython "/home/adnan/.local/share/uv/python/cpython-3.12.8-linux-x86_64-gnu/bin/python3.12"
+        // Build-host Python. Left unset so Chaquopy auto-detects python3.12
+        // from PATH (works on CI and any dev box). Override locally with
+        // -PchaquopyBuildPython=/path/to/python3.12 if needed.
+        def buildPy = project.findProperty("chaquopyBuildPython")
+        if (buildPy) {
+            buildPython buildPy
+        }
         pip {
             // Chaquopy's pip index stops at 2024.10.22; pin the wheel URL.
             install "https://files.pythonhosted.org/packages/f9/8a/cd4c9b02c10c563adfe78118310129641900e1cd6de888cfae2452072696/yt_dlp-2026.7.4-py3-none-any.whl"

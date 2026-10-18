@@ -34,10 +34,10 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
 
-      - name: Set up Python (Chaquopy build host)
+      - name: Set up Python (Chaquopy build host, must match chaquopy.version)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Read version from build.gradle
         id: ver
