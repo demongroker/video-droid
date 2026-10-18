@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     private lateinit var cancelButton: Button
     private lateinit var openPageButton: Button
     private lateinit var jobProgress: LinearProgressIndicator
+    private lateinit var jobCard: com.google.android.material.card.MaterialCardView
     private lateinit var status: TextView
     private lateinit var presetsToggle: MaterialButton
     private lateinit var presetsExpanded: ChipGroup
@@ -105,6 +106,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         cancelButton = findViewById(R.id.cancelButton)
         openPageButton = findViewById(R.id.openPageButton)
         jobProgress = findViewById(R.id.jobProgress)
+        jobCard = findViewById(R.id.jobCard)
         status = findViewById(R.id.status)
         presetsToggle = findViewById(R.id.presetsToggle)
         presetsExpanded = findViewById(R.id.presetsExpanded)
@@ -712,6 +714,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     /** Single place that pushes ViewModel state into the widgets. */
     private fun render(s: MainUiState) {
         if (status.text?.toString() != s.statusText) status.text = s.statusText
+        jobCard.visibility =
+            if (s.statusText.isNotEmpty() || s.progressVisible) View.VISIBLE else View.GONE
         goButton.isEnabled = true
         goButton.text = when {
             s.busy -> "Add to queue"
