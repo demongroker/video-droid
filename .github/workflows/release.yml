@@ -24,8 +24,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The ubuntu-latest image already ships the Android SDK (ANDROID_HOME is
+      # set). android-actions/setup-android@v3 currently fails with
+      # "Failed to find package 'tools'", so just assert the SDK is present.
+      - name: Verify Android SDK is available
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?ANDROID_HOME is not set on this runner}"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
 
       - name: Set up Python (Chaquopy build host)
         uses: actions/setup-python@v5
