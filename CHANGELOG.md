@@ -2,6 +2,17 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.7.0 (versionCode 56)
+
+Phase 1 — hardening, CI and size.
+
+- **Gradle wrapper + CI**: the repo now builds from the checked-in `gradlew` (8.9). New `.github/workflows/release.yml` runs on every PR/branch (debug + unsigned release, as a compile and size check) and produces a **signed** release on `v*` tags — one asset `VideoDroid-<version>.apk` plus `.sha256`.
+- **Updater hardened**: removed the hard-coded private plain-HTTP fallback (`http://100.105.81.82:8899/videodroid/version`). Update checks now use GitHub releases only and the APK URL must be `https`. The signing-certificate check is unchanged.
+- **Clear login narrowed**: clearing the X login now expires only x.com / twitter.com cookies instead of wiping the whole WebView cookie jar.
+- **APK ~11.7% smaller**: `minifyEnabled` + `shrinkResources` enabled with keep rules for Chaquopy and ffmpeg-kit; `ffmpeg-kit-full` → `ffmpeg-kit-video` (only copy / aac / mpeg4 / h264_mediacodec are used). Release APK 58.1 MiB → 51.3 MiB.
+- **Docs**: README updated to 1.6.28 behaviour (`best` removed, mpeg4 fallback documented); stale "instead of best (HEVC)" error text fixed; CHANGELOG 1.6.21 de-duplicated and reordered; pixel format corrected to `yuv420p` (not nv12).
+- **Build portability**: Chaquopy no longer hard-codes a local `buildPython` path, and `gradle.properties` (AndroidX flags) is now tracked.
+
 ## 1.6.28 (versionCode 55)
 
 - **mpeg4 fallback fix**: hwaccel (`-hwaccel mediacodec`) is now structural-only for `h264_mediacodec` encode attempts. The mpeg4 encoder path never receives hwaccel args — pure software decode + mpeg4 software encode works on any source the software decoder can read. Fixes rc 69 invalid-data failure on HEVC files in the mpeg4 fallback path.
