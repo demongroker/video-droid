@@ -21,13 +21,12 @@ import java.net.URL
 /**
  * Non-blocking update checker. No GitHub token. Fail closed.
  *
- * GitHub releases/latest first; on non-200 try Tailscale :8899/videodroid/version
- * (tag_name + html_url apk). User-initiated Check update surfaces HTTP errors.
+ * GitHub releases/latest only — the old plain-HTTP Tailscale fallback was
+ * removed (it pointed at a private LAN address and could be spoofed).
+ * User-initiated Check update surfaces HTTP errors.
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
-    private const val TAILSCALE_VERSION =
-        "http://100.105.81.82:8899/videodroid/version"
 
     private data class ReleaseInfo(val tag: String, val apkUrl: String)
     private data class FetchOutcome(val info: ReleaseInfo?, val error: String?)
@@ -64,32 +63,19 @@ object UpdateChecker {
         }
     }
 
-    private fun fetchLatest(): FetchOutcome {
-        val gh = fetchGithub()
-        if (gh.info != null) return gh
-        val ts = fetchTailscale()
-        if (ts.info != null) return ts
-        val err = listOfNotNull(gh.error, ts.error).joinToString(" · ")
-        return FetchOutcome(null, err.ifBlank { "Update check failed" })
-    }
+    private fun fetchLatest(): FetchOutcome = fetchGithub()
 
-    private fun fetchGithub(): FetchOutcome {
-        return fetchJson(BuildConfig.UPDATER_URL, github = true)
-    }
+    private fun fetchGithub(): FetchOutcome = fetchJson(BuildConfig.UPDATER_URL)
 
-    private fun fetchTailscale(): FetchOutcome {
-        return fetchJson(TAILSCALE_VERSION, github = false)
-    }
-
-    private fun fetchJson(url: String, github: Boolean): FetchOutcome {
-        val label = if (github) "GitHub" else "Tailscale :8899"
+    private fun fetchJson(url: String): FetchOutcome {
+        val label = "GitHub"
         return try {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 8000
             conn.readTimeout = 8000
             conn.setRequestProperty("User-Agent", "VideoDroid")
-            if (github) conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
             val code = conn.responseCode
             if (code != 200) {
                 Log.w(TAG, "$label update check: HTTP $code")
@@ -101,10 +87,9 @@ object UpdateChecker {
             val json = JSONObject(body)
             val tag = json.optString("tag_name")
             if (tag.isBlank()) return FetchOutcome(null, "$label: missing tag_name")
-            val apkUrl = if (github) firstGithubApk(json) else json.optString("html_url")
-            if (apkUrl.isNullOrBlank() ||
-                !(apkUrl.startsWith("https://") || apkUrl.startsWith("http://"))
-            ) {
+            // HTTPS only — no plain-HTTP update path is allowed.
+            val apkUrl = firstGithubApk(json)
+            if (apkUrl.isNullOrBlank() || !apkUrl.startsWith("https://")) {
                 return FetchOutcome(null, "$label: no apk url")
             }
             FetchOutcome(ReleaseInfo(tag, apkUrl), null)

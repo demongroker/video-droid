@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
     id 'com.chaquo.python'
     id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
 }
 
 android {
@@ -24,19 +25,28 @@ android {
     signingConfigs {
         release {
             storeFile file("../videodroid.keystore")
-            storePassword RELEASE_STORE_PASSWORD
+            storePassword project.findProperty("RELEASE_STORE_PASSWORD") ?: "debug"
             keyAlias "videodroid"
-            keyPassword RELEASE_KEY_PASSWORD
+            keyPassword project.findProperty("RELEASE_KEY_PASSWORD") ?: "debug"
         }
     }
     buildTypes {
         release {
-            minifyEnabled false
+            // Shrink the ~61 MB APK: R8 tree-shaking + resource shrinking.
+            // Keep rules for Chaquopy and ffmpeg-kit live in proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
     }
     buildFeatures {
         buildConfig true
+        compose true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -44,6 +54,11 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    packagingOptions {
+        resources {
+            excludes += "/META-INF/*.kotlin_module"
+        }
     }
 }
 
@@ -60,9 +75,69 @@ chaquopy {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.12.0'
+    // Core AndroidX
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.7.0'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'io.github.maitrungduc1410:ffmpeg-kit-full:7.1.5'
+
+    // Jetpack Compose BOM - compatible with Kotlin 1.9.24
+    def composeBom = platform('androidx.compose:compose-bom:2023.08.00')
+    implementation composeBom
+    androidTestImplementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material3:material3-window-size-class'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.runtime:runtime'
+    implementation 'androidx.compose.runtime:runtime-livedata'
+    // runtime-saved-instance-state may not be in this BOM version
+
+    // Coroutines & Flow
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+
+    // Media3 ExoPlayer
+    def media3_version = "1.3.1"
+    implementation "androidx.media3:media3-exoplayer:$media3_version"
+    implementation "androidx.media3:media3-ui:$media3_version"
+    implementation "androidx.media3:media3-common:$media3_version"
+    implementation "androidx.media3:media3-datasource:$media3_version"
+
+    // WorkManager
+    def work_version = "2.9.0"
+    implementation "androidx.work:work-runtime-ktx:$work_version"
+
+    // Room Database for DownloadQueue
+    def room_version = "2.6.1"
+    implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
+    kapt "androidx.room:room-compiler:$room_version"
+
+    // Dagger Hilt
+    implementation 'com.google.dagger:hilt-android:2.50'
+    kapt 'com.google.dagger:hilt-compiler:2.50'
+    implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
+
+    // Navigation Compose
+    def nav_version = "2.7.6"
+    implementation "androidx.navigation:navigation-compose:$nav_version"
+    implementation "androidx.navigation:navigation-fragment-ktx:$nav_version"
+    implementation "androidx.navigation:navigation-ui-ktx:$nav_version"
+
+    // FFmpeg
+    implementation 'io.github.maitrungduc1410:ffmpeg-kit-video:7.1.5'
+
+    // Coil for images
+    implementation 'io.coil-kt:coil-compose:2.4.0'
+
+    // Serialization
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
 }
