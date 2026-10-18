@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import com.xerxes.videodroid.ui.Insets
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -29,6 +30,7 @@ class OpenPageActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_open_page)
+        Insets.applyTo(findViewById(R.id.openPageRoot))
 
         AdBlock.ensureLoaded(this)
 

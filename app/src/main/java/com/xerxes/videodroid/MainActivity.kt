@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.xerxes.videodroid.ui.JobSettings
+import com.xerxes.videodroid.ui.Insets
 import com.xerxes.videodroid.ui.MainUiState
 import com.xerxes.videodroid.ui.MainViewModel
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +83,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // targetSdk 36 = enforced edge-to-edge; keep content out of the bars.
+        Insets.applyTo(findViewById(R.id.mainScroll))
 
         urlInput = findViewById(R.id.urlInput)
         dlQuality = findViewById(R.id.dlQuality)
