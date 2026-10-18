@@ -47,6 +47,9 @@ object DownloadQueue {
         done
     }
 
+    /** Snapshot of the pending queue, head first. */
+    fun all(ctx: Context): List<QueuedJob> = synchronized(lock) { loadLocked(ctx).toList() }
+
     fun size(ctx: Context): Int = synchronized(lock) { loadLocked(ctx).size }
 
     fun waiting(ctx: Context): Int = synchronized(lock) {

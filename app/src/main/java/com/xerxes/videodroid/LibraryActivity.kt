@@ -44,6 +44,7 @@ class LibraryActivity : AppCompatActivity() {
 
         list = findViewById(R.id.libraryList)
         empty = findViewById(R.id.libraryEmpty)
+        NavHelper.wire(this, R.id.tab_library)
         findViewById<View>(R.id.libraryBack).setOnClickListener { finish() }
 
         val items = loadItems()

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/tab_download"
+        android:title="Download" />
+    <item
+        android:id="@+id/tab_queue"
+        android:title="Queue" />
+    <item
+        android:id="@+id/tab_library"
+        android:title="Library" />
+</menu>
