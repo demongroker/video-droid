@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode fallback when dynamic colour is unavailable (< Android 12). -->
+    <color name="primary">#9FA8DA</color>
+    <color name="onPrimary">#1A237E</color>
+</resources>
