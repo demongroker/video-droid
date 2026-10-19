@@ -1,470 +1,640 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/mainWrapper"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:id="@+id/mainWrapper"
+    android:background="@color/vd_bg"
     android:orientation="vertical">
 
-<ScrollView
-    android:id="@+id/mainScroll"
-    android:layout_width="match_parent"
-    android:layout_height="0dp"
-    android:layout_weight="1"
-    android:fillViewport="true"
-    android:clickable="true"
-    android:focusable="true">
-
-    <LinearLayout
-        android:id="@+id/mainRoot"
+    <ScrollView
+        android:id="@+id/mainScroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp"
-        android:clickable="true"
-        android:focusable="true">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="VideoDroid"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Paste or share any video link"
-            android:textSize="13sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/presetsToggle"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="6dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="Social presets"
-            android:textSize="13sp"
-            app:icon="@drawable/ic_mark_stack"
-            app:iconGravity="textStart"
-            app:iconPadding="8dp"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/presetsExpanded"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:visibility="gone"
-            app:chipSpacingHorizontal="6dp"
-            app:chipSpacingVertical="4dp">
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetX"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="X"
-                app:chipIcon="@drawable/ic_mark_x"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetTikTok"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TikTok"
-                app:chipIcon="@drawable/ic_mark_tiktok"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetShorts"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Shorts"
-                app:chipIcon="@drawable/ic_mark_shorts"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetReels"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Reels"
-                app:chipIcon="@drawable/ic_mark_reels"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetYouTube"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="YouTube"
-                app:chipIcon="@drawable/ic_mark_youtube"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetInstagram"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Instagram"
-                app:chipIcon="@drawable/ic_mark_instagram"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/presetFacebook"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Facebook"
-                app:chipIcon="@drawable/ic_mark_facebook"
-                app:chipIconVisible="true"
-                style="@style/Widget.MaterialComponents.Chip.Action" />
-        </com.google.android.material.chip.ChipGroup>
-
-        <EditText
-            android:id="@+id/urlInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:hint="https://... video link"
-            android:inputType="textUri|textMultiLine"
-            android:minLines="2"
-            android:maxLines="3"
-            android:textSize="15sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/localButton"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="6dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="Export local video…"
-            android:textSize="13sp"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="Download quality"
-            android:textSize="13sp" />
-
-        <Spinner
-            android:id="@+id/dlQuality"
-            android:layout_width="match_parent"
-            android:layout_height="48dp" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/recommendedButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Recommended"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/myLastButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="My last"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_weight="1"
-                android:text="Export (convert with FFmpeg)"
-                android:textSize="14sp" />
-
-            <Switch
-                android:id="@+id/exportSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/exportOptions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Aspect"
-                android:textSize="13sp" />
-
-            <Spinner
-                android:id="@+id/aspectMode"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:spinnerMode="dropdown" />
-
-            <LinearLayout
-                android:id="@+id/aspectRatioRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Ratio"
-                    android:textSize="13sp" />
-
-                <Spinner
-                    android:id="@+id/aspectRatio"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:spinnerMode="dropdown" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical"
-                    android:layout_weight="1"
-                    android:text="Auto-trim"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/trimOnOff"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical"
-                    android:layout_marginEnd="8dp"
-                    android:text="Off"
-                    android:textSize="14sp" />
-
-                <Switch
-                    android:id="@+id/trimSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/trimFields"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <EditText
-                    android:id="@+id/trimStart"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="Start (seconds)"
-                    android:inputType="number"
-                    android:text="1" />
-
-                <EditText
-                    android:id="@+id/trimEnd"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:hint="End (seconds)"
-                    android:inputType="number"
-                    android:text="1" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/goButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:text="Download &amp; Convert"
-            android:textSize="16sp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/cancelButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="6dp"
-            android:text="Cancel current"
-            android:visibility="gone"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/jobCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:visibility="gone"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeColor="?attr/colorOutlineVariant"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <com.google.android.material.progressindicator.LinearProgressIndicator
-                    android:id="@+id/jobProgress"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    android:max="100"
-                    android:progress="0"
-                    app:indicatorColor="?attr/colorPrimary"
-                    app:trackCornerRadius="4dp"
-                    app:trackThickness="8dp" />
-
-                <TextView
-                    android:id="@+id/status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:fontFamily="monospace"
-                    android:textSize="13sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/openPageButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="6dp"
-            android:text="Open page"
-            android:visibility="gone"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-        <TextView
-            android:id="@+id/moreToggle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:text="More ▸"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:id="@+id/moreSection"
+            android:id="@+id/mainRoot"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:visibility="gone">
+            android:paddingStart="20dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="28dp">
 
+            <!-- ── Header ────────────────────────────────────────────── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="-0.02"
+                    android:text="VideoDroid"
+                    android:textColor="@color/vd_text"
+                    android:textSize="26sp" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/dot_emerald" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ready"
+                    android:textColor="@color/vd_text_dim"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- ── Paste / URL bar ───────────────────────────────────── -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.VideoDroid.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="4dp">
+
+                    <EditText
+                        android:id="@+id/urlInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Paste a video link"
+                        android:imeOptions="actionGo"
+                        android:inputType="textUri"
+                        android:maxLines="2"
+                        android:minHeight="52dp"
+                        android:textColor="@color/vd_text"
+                        android:textColorHint="@color/vd_text_dim"
+                        android:textSize="15sp" />
+
+                    <ImageButton
+                        android:id="@+id/pasteButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Paste from clipboard"
+                        android:padding="11dp"
+                        android:src="@drawable/ic_paste"
+                        app:tint="@color/vd_violet_soft" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ── Download button ───────────────────────────────────── -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/goButton"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="14dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="Download"
+                android:textAllCaps="false"
+                android:textSize="16sp"
+                app:backgroundTint="@color/vd_violet"
+                app:cornerRadius="18dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cancelButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="2dp"
+                android:text="Cancel current"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_danger"
+                android:visibility="gone" />
+
+            <!-- ── Quality pills ─────────────────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="20dp"
+                android:letterSpacing="0.08"
+                android:text="QUALITY"
+                android:textColor="@color/vd_text_dim"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/qualityPills"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/q4k"
+                    style="@style/Widget.VideoDroid.Pill"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="4K" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/q1080"
+                    style="@style/Widget.VideoDroid.Pill"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="1080" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/q720"
+                    style="@style/Widget.VideoDroid.Pill"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="720" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/q480"
+                    style="@style/Widget.VideoDroid.Pill"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="480" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <!-- Backing store for the pill selection; never shown. -->
+            <Spinner
+                android:id="@+id/dlQuality"
+                android:layout_width="1dp"
+                android:layout_height="1dp"
+                android:visibility="gone" />
+
+            <!-- ── Progress card ─────────────────────────────────────── -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/jobCard"
+                style="@style/Widget.VideoDroid.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:id="@+id/jobThumb"
+                            android:layout_width="54dp"
+                            android:layout_height="54dp"
+                            android:background="@color/vd_surface_high"
+                            android:contentDescription="Thumbnail"
+                            android:scaleType="centerCrop" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/status"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="2"
+                                android:text="Starting…"
+                                android:textColor="@color/vd_text"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/jobSpeed"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text=""
+                                    android:textColor="@color/vd_emerald"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/jobEta"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:text=""
+                                    android:textColor="@color/vd_text_dim"
+                                    android:textSize="12sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/jobProgress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="14dp"
+                        android:max="100"
+                        android:progressTint="@color/vd_violet"
+                        android:progressBackgroundTint="@color/vd_outline"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ── Options sheet trigger ─────────────────────────────── -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/optionsButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="Options"
+                android:textAllCaps="false"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/vd_outline" />
+
+            <!-- Hidden host for the advanced controls moved into the sheet. -->
+            <LinearLayout
+                android:id="@+id/exportOptions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- ── Presets (collapsed) ───────────────────────────────── -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/presetsToggle"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Presets"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <LinearLayout
+                android:id="@+id/presetsExpanded"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetX"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="X" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetTikTok"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="TikTok" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetShorts"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="Shorts" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetReels"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Reels" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetInstagram"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="Instagram" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetYouTube"
+                        style="@style/Widget.VideoDroid.Pill"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="YouTube" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ── More (collapsed) ──────────────────────────────────── -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/moreToggle"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="More"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <LinearLayout
+                android:id="@+id/moreSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Export -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Convert for social"
+                        android:textColor="@color/vd_text"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/exportSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <!-- Aspect -->
+                <LinearLayout
+                    android:id="@+id/aspectRatioRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <Spinner
+                        android:id="@+id/aspectMode"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1" />
+
+                    <Spinner
+                        android:id="@+id/aspectRatio"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <!-- Trim -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Trim"
+                        android:textColor="@color/vd_text"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/trimSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/trimOnOff"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text=""
+                        android:textColor="@color/vd_text_dim"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/trimFields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <EditText
+                        android:id="@+id/trimStart"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="0:00"
+                        android:inputType="text"
+                        android:textColor="@color/vd_text"
+                        android:textColorHint="@color/vd_text_dim" />
+
+                    <EditText
+                        android:id="@+id/trimEnd"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="end"
+                        android:inputType="text"
+                        android:textColor="@color/vd_text"
+                        android:textColorHint="@color/vd_text_dim" />
+                </LinearLayout>
+
+                <!-- Parallel downloads -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Simultaneous downloads"
+                        android:textColor="@color/vd_text"
+                        android:textSize="14sp" />
+
+                    <Spinner
+                        android:id="@+id/parallelSpinner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp" />
+                </LinearLayout>
+
+                <!-- Battery -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/batteryButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Battery"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <!-- Sources -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/localButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Local video"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openPageButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Open page"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/myLastButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="My last link"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/recommendedButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Recommended settings"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <!-- Account -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/loginXButton"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_weight="1"
-                    android:text="Login X"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Log in to X"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/clearLoginButton"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
                     android:text="Clear login"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <!-- Library -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/libraryButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Library"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <!-- Diagnostics -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/copyLogButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Copy log"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/checkUpdateButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Check update"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/changelogButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:text="Changelog"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim" />
             </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/copyLogButton"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Copy log"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/checkUpdateButton"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Check update"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Simultaneous downloads"
-                android:textAppearance="?attr/textAppearanceLabelLarge" />
-
-            <Spinner
-                android:id="@+id/parallelSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="4dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/batteryButton"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Battery: unrestricted"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/libraryButton"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Library"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/changelogButton"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Changelog"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
         </LinearLayout>
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
 
-    <include layout="@layout/bottom_nav" />
+    <include
+        android:id="@+id/bottomNavHost"
+        layout="@layout/bottom_nav" />
 </LinearLayout>
