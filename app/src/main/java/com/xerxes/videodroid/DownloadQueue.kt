@@ -14,17 +14,29 @@ data class QueuedJob(
     val progress: Int = 0,
     /** Directory holding the resumable .part file for this item. */
     val partialPath: String = "",
-)
+    /** Stable id so parallel workers and the UI can address one item. */
+    val id: String = "",
+) {
+    val displayName: String
+        get() = url.ifBlank { localPath.substringAfterLast('/') }
+}
 
 /**
- * FIFO job list persisted under filesDir/download_queue.json so a process death
- * can resume remaining URLs (current job restarts from scratch).
+ * FIFO job list persisted under filesDir/download_queue.json.
+ *
+ * With parallel downloads more than one item can be in flight, so the queue
+ * hands out **claims**: [claimNext] marks an item in-flight and returns it, and
+ * the worker calls [finish] when done. Claims live in memory only — a process
+ * death releases them all, which is exactly what a restart wants.
  */
 object DownloadQueue {
     private const val FILE = "download_queue.json"
     private const val TAG = "VideoDroid.Queue"
     private const val CORRUPT_MSG = "Queue file corrupt. Backup kept."
     private val lock = Any()
+
+    /** ids currently held by a worker. */
+    private val claimed = LinkedHashSet<String>()
 
     @Volatile
     var lastCorruptNotice: String? = null
@@ -36,47 +48,82 @@ object DownloadQueue {
         return m
     }
 
+    /** New queue size, or **-1** when this URL is already queued. */
     fun enqueue(ctx: Context, job: QueuedJob): Int = synchronized(lock) {
         val jobs = loadLocked(ctx)
-        jobs.add(job)
+        val url = job.url.trim()
+        if (url.isNotEmpty() && jobs.any { it.url.trim() == url }) {
+            return@synchronized -1
+        }
+        jobs.add(job.copy(id = job.id.ifEmpty { newId() }))
         saveLocked(ctx, jobs)
         jobs.size
     }
 
     fun peek(ctx: Context): QueuedJob? = synchronized(lock) {
-        loadLocked(ctx).firstOrNull()
+        loadLocked(ctx).firstOrNull { it.id !in claimed }
     }
 
-    fun completeCurrent(ctx: Context): QueuedJob? = synchronized(lock) {
+    /** Next item not already in flight, claimed for the calling worker. */
+    fun claimNext(ctx: Context): QueuedJob? = synchronized(lock) {
+        val next = loadLocked(ctx).firstOrNull { it.id !in claimed } ?: return@synchronized null
+        claimed.add(next.id)
+        next
+    }
+
+    /** Release the claim and drop the item (finished, failed or cancelled). */
+    fun finish(ctx: Context, id: String) = synchronized(lock) {
+        claimed.remove(id)
         val jobs = loadLocked(ctx)
-        if (jobs.isEmpty()) return null
-        val done = jobs.removeAt(0)
+        jobs.removeAll { it.id == id }
         saveLocked(ctx, jobs)
-        done
     }
 
-    /** Snapshot of the pending queue, head first. */
+    /** Drop one item without running it (per-item cancel). */
+    fun remove(ctx: Context, id: String) = synchronized(lock) {
+        claimed.remove(id)
+        val jobs = loadLocked(ctx)
+        jobs.removeAll { it.id == id }
+        saveLocked(ctx, jobs)
+    }
+
+    fun releaseAllClaims() = synchronized(lock) { claimed.clear() }
+
+    fun inFlightIds(): List<String> = synchronized(lock) { claimed.toList() }
+
+    fun isClaimed(id: String): Boolean = synchronized(lock) { id in claimed }
+
+    fun get(ctx: Context, id: String): QueuedJob? = synchronized(lock) {
+        loadLocked(ctx).firstOrNull { it.id == id }
+    }
+
     fun all(ctx: Context): List<QueuedJob> = synchronized(lock) { loadLocked(ctx).toList() }
 
     fun size(ctx: Context): Int = synchronized(lock) { loadLocked(ctx).size }
 
+    /** Items not yet claimed — what the UI shows as "queued". */
     fun waiting(ctx: Context): Int = synchronized(lock) {
-        (loadLocked(ctx).size - 1).coerceAtLeast(0)
+        loadLocked(ctx).count { it.id !in claimed }
     }
 
-    /** Persist live progress for the item currently downloading (the head). */
-    fun setProgress(ctx: Context, progress: Int, partialPath: String) = synchronized(lock) {
-        val jobs = loadLocked(ctx)
-        if (jobs.isEmpty()) return@synchronized
-        val head = jobs[0]
-        if (head.progress == progress && head.partialPath == partialPath) return@synchronized
-        jobs[0] = head.copy(progress = progress.coerceIn(0, 100), partialPath = partialPath)
-        saveLocked(ctx, jobs)
-    }
+    fun setProgress(ctx: Context, id: String, progress: Int, partialPath: String) =
+        synchronized(lock) {
+            val jobs = loadLocked(ctx)
+            val idx = jobs.indexOfFirst { it.id == id }
+            if (idx < 0) return@synchronized
+            val cur = jobs[idx]
+            val p = progress.coerceIn(0, 100)
+            if (cur.progress == p && cur.partialPath == partialPath) return@synchronized
+            jobs[idx] = cur.copy(progress = p, partialPath = partialPath)
+            saveLocked(ctx, jobs)
+        }
 
     fun clear(ctx: Context) = synchronized(lock) {
+        claimed.clear()
         saveLocked(ctx, mutableListOf())
     }
+
+    fun newId(): String = java.util.UUID.randomUUID().toString()
 
     private fun file(ctx: Context) = File(ctx.filesDir, FILE)
 
@@ -106,6 +153,8 @@ object DownloadQueue {
                         localPath = o.optString("local", ""),
                         progress = o.optInt("progress", 0),
                         partialPath = o.optString("partial", ""),
+                        // Queue files written before 1.9.4 have no id.
+                        id = o.optString("id", "").ifEmpty { newId() },
                     ),
                 )
             }
@@ -137,6 +186,7 @@ object DownloadQueue {
         for (j in jobs) {
             arr.put(
                 JSONObject().apply {
+                    put("id", j.id)
                     put("url", j.url)
                     put("dlq", j.opts.dlQuality)
                     put("height", j.opts.exportHeight)

@@ -161,7 +161,7 @@ class DownloadService : Service() {
                 } catch (t: Throwable) {
                     FormatResult(false, t.message ?: "Failed")
                 }
-                DownloadQueue.completeCurrent(applicationContext)
+                DownloadQueue.finish(applicationContext, next.id)
                 listener?.onFinished(res)
             }
         } catch (t: Throwable) {
@@ -206,7 +206,7 @@ class DownloadService : Service() {
         lastPersistedPct = pct
         val head = DownloadQueue.peek(applicationContext) ?: return
         val dir = FormatWorker.partialDirFor(applicationContext, head.url, head.localPath)
-        DownloadQueue.setProgress(applicationContext, pct, dir.absolutePath)
+        DownloadQueue.setProgress(applicationContext, head.id, pct, dir.absolutePath)
     }
 
     // ---- connectivity ----
