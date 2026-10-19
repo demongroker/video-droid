@@ -45,6 +45,12 @@ class QueueResumeWorker(
 
         /** Unique work: enqueueing twice does not stack resume attempts. */
         fun schedule(ctx: Context) {
+            // WorkManager can be unavailable (restricted process, custom
+            // initializer, test harness). Scheduling must never crash startup.
+            runCatching { scheduleInner(ctx) }
+        }
+
+        private fun scheduleInner(ctx: Context) {
             val req = OneTimeWorkRequestBuilder<QueueResumeWorker>()
                 .setConstraints(
                     Constraints.Builder()
