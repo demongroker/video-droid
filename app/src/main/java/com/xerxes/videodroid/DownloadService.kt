@@ -83,7 +83,6 @@ class DownloadService : Service() {
         when (intent?.action) {
             ACTION_CANCEL -> {
                 FormatWorker.requestCancel()
-                workerThread?.interrupt()
                 publishGlobal("Cancelling...")
             }
             ACTION_START -> {
@@ -130,7 +129,7 @@ class DownloadService : Service() {
 
     /** Keep the pool topped up: claim work until the limit, then run it. */
     private fun ensurePump() {
-        startInForeground(composeNotif(summaryLine()))
+        startInForeground(composeNotif(lastJobLine, summaryLine()))
         synchronized(pumpLock) {
             val limit = maxParallel()
             while (workerThreads.size < limit) {
@@ -221,9 +220,7 @@ class DownloadService : Service() {
         listener?.onStatus(jobLine)
     }
 
-    private var lastPersistedPct = -1
-
-    /** Remember how far this item got, so a restart can resume and show it. */
+    /** Remember how far each item got, so a restart can resume and show it. */
     private val lastPersistedPct = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     private fun persistProgress(id: String, jobLine: String) {
@@ -249,13 +246,13 @@ class DownloadService : Service() {
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 networkLost = true
-                if (isRunning) publish("Waiting for connection… (resumes automatically)")
+                if (isRunning) publishGlobal("Waiting for connection… (resumes automatically)")
             }
 
             override fun onAvailable(network: Network) {
                 if (!networkLost) return
                 networkLost = false
-                if (isRunning) publish("Connection restored — resuming…")
+                if (isRunning) publishGlobal("Connection restored — resuming…")
             }
         }
         runCatching { cm.registerDefaultNetworkCallback(cb) }

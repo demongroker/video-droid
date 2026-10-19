@@ -25,6 +25,18 @@ Private phone app. Updates: public GitHub Releases (no token in the APK).
   quality sheet blocking the flow.
 - **Persistence**: unfinished items resume on app start and `BOOT_COMPLETED`,
   up to the configured parallelism.
+- **Page fallback actually finds the video now** (fixes 1.9.3 finding nothing
+  on some sites). Diagnosed on `porneec.com`: the player is a **lazyloaded
+  iframe** (`src="about:blank"`, real URL in `data-litespeed-src`) and the
+  `<video><source>` markup is **base64-encoded inside a `player-x.php?q=`**
+  parameter. The sniffer now forces those frames to load, decodes `?q=` base64
+  payloads, follows iframes (tries yt-dlp on each embed URL first), reads
+  `data-src`/`data-video`, JSON-LD `contentUrl`/`embedUrl`, `og:video`,
+  `twitter:player` and `file:`/`sources:` player blobs, dismisses age-gate and
+  consent buttons, taps the player, and sniffs for **40s** showing
+  *"Searching page for video… (Ns)"*. When nothing is found, the candidate list
+  and iframe chain go into **Copy log** so the reason is visible.
+
 - Notification shows a summary ("Downloading 2 · 3 queued") alongside the
   current stage.
 
