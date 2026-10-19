@@ -22,15 +22,25 @@ shoot () {
   sleep 3
   adb shell am start -W -n "com.xerxes.videodroid/.${activity}" || true
   sleep 15
-  adb shell input keyevent KEYCODE_BACK || true
-  sleep 2
 
   local focus
   focus=$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' || true)
   echo "focus: ${focus}"
+
+  # Only press BACK when something else really is on top - pressing it
+  # unconditionally closes our own activity back to the launcher.
+  if ! echo "${focus}" | grep -q 'com.xerxes.videodroid'; then
+    echo "covered by another window, dismissing"
+    adb shell input keyevent KEYCODE_BACK || true
+    sleep 3
+    adb shell am start -W -n "com.xerxes.videodroid/.${activity}" || true
+    sleep 6
+    focus=$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' || true)
+    echo "focus after dismiss: ${focus}"
+  fi
+
   if ! echo "${focus}" | grep -q 'com.xerxes.videodroid'; then
     echo "::error::${activity} does not hold focus - a system dialog is covering it"
-    echo "::error::frame discarded, not uploaded as a screenshot"
     return 1
   fi
 
