@@ -2,6 +2,31 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.3 (versionCode 61)
+
+### Fallback for sites yt-dlp has no extractor for
+
+- **Bundled yt-dlp updated** to the latest stable (**2026.8.19**), so new
+  extractors may already cover some sites without any fallback.
+- **Step 1 — generic extractor.** On `Unsupported URL`, retry once with
+  `force_generic_extractor=True`, keeping the same quality, resume and retry
+  settings.
+- **Step 2 — page sniffer.** If generic also fails, the page is loaded in a
+  hidden WebView (desktop UA, JS on, ~20s cap, first player auto-clicked) and
+  media requests are captured (`.mp4`, `.m3u8`, `.mpd`, `.webm`, `.m4v`) along
+  with `<video>` / `<source>` sources and `og:video`. Ad/tracker hosts are
+  ignored and a streaming master playlist is preferred over a flat mp4.
+- **The found URL goes back through yt-dlp** with `Referer` = page URL, the
+  desktop User-Agent and the WebView cookies — so resumable partials, infinite
+  retries and the queue still apply.
+- **Status**: *"Site not supported — trying page fallback…"*, then
+  *"Found video on page — downloading…"*. If nothing is found:
+  *"No downloadable video found on this page"* — no crash, the queue moves on.
+- **Debug**: the path that succeeded (native / generic / sniffer) and the chosen
+  media host are recorded in the job diagnostics.
+- **Filename** falls back to the sanitised page `<title>` when there is no
+  extractor title.
+
 ## 1.9.2 (versionCode 60)
 
 ### Resumable downloads
