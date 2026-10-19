@@ -414,7 +414,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <Switch
+                    <android.widget.Switch
                         android:id="@+id/exportSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
@@ -458,7 +458,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <Switch
+                    <android.widget.Switch
                         android:id="@+id/trimSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
