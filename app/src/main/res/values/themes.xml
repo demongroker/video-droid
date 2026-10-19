@@ -3,5 +3,39 @@
     <style name="Theme.VideoDroid" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/onPrimary</item>
+        <item name="colorSecondary">@color/secondary</item>
+        <item name="colorOnSecondary">@color/onSecondary</item>
+        <item name="android:colorBackground">@color/vd_bg</item>
+        <item name="colorSurface">@color/vd_surface</item>
+        <item name="colorSurfaceVariant">@color/vd_surface_high</item>
+        <item name="colorOnSurface">@color/vd_text</item>
+        <item name="colorOnSurfaceVariant">@color/vd_text_dim</item>
+        <item name="colorOutline">@color/vd_outline</item>
+        <item name="android:windowBackground">@color/vd_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Pill-shaped quality / filter chips -->
+    <style name="Widget.VideoDroid.Pill" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">36dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Card used for progress / jobs -->
+    <style name="Widget.VideoDroid.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">@color/vd_surface</item>
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/vd_outline</item>
+        <item name="strokeWidth">1dp</item>
     </style>
 </resources>
