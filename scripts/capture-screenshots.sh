@@ -10,6 +10,10 @@ set -euo pipefail
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 mkdir -p screenshots
 adb shell settings put secure anr_show_background 0 || true
+
+# Our own first-run battery prompt (RequestIgnoreBatteryOptimizations) steals
+# focus and got MainActivity rejected. Whitelist the app so it never appears.
+adb shell dumpsys deviceidle whitelist +com.xerxes.videodroid >/dev/null 2>&1 || true
 sleep 20
 
 shoot () {
@@ -18,6 +22,8 @@ shoot () {
   sleep 3
   adb shell am start -W -n "com.xerxes.videodroid/.${activity}" || true
   sleep 15
+  adb shell input keyevent KEYCODE_BACK || true
+  sleep 2
 
   local focus
   focus=$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' || true)
