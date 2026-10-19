@@ -176,6 +176,37 @@ def _human_bytes(n):
     return "%.2f GB" % (n / (1024.0 * 1024.0 * 1024.0))
 
 
+_TRANSIENT_HINTS = (
+    "timed out",
+    "timeout",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "connection error",
+    "remote end closed",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "network is unreachable",
+    "no route to host",
+    "getaddrinfo",
+    "eof occurred",
+    "incompleteread",
+    "broken pipe",
+    "ssl",
+    "handshake",
+    "unable to download webpage",
+    "read timed out",
+)
+
+
+def _is_network_error(exc):
+    """True when retrying later could plausibly succeed."""
+    msg = str(exc).lower()
+    if "certificate_verify" in msg or "certificate verify failed" in msg:
+        return False
+    return any(h in msg for h in _TRANSIENT_HINTS)
+
+
 def _hook_status_line(d):
     """Honest status. Never a numeric % unless total_bytes or estimate is known."""
     downloaded = d.get("downloaded_bytes") or 0
@@ -434,13 +465,17 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
-        "retries": 3,
-        "fragment_retries": 3,
+        # Never give up on a drop: the retry loop below waits for the network
+        # to come back instead of failing the job.
+        "retries": float("inf"),
+        "fragment_retries": float("inf"),
         # Keep the .part file and resume it on retry/restart instead of
         # restarting the transfer from zero (where the server allows ranges).
         "continuedl": True,
         "nopart": False,
-        "socket_timeout": 8,
+        # Generous enough to survive a tunnel / lift / handover without
+        # declaring the connection dead.
+        "socket_timeout": 30,
         "progress_hooks": [_hook],
         "merge_output_format": "mp4",
         "extractor_args": {
@@ -462,8 +497,22 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
         else:
             run_opts["format"] = format_spec
         _check_cancel()
-        with _AbortableYDL(run_opts) as ydl:
-            return ydl.extract_info(url, download=True)
+        attempt = 0
+        while True:
+            try:
+                with _AbortableYDL(run_opts) as ydl:
+                    return ydl.extract_info(url, download=True)
+            except (_Cancelled, NeedXLogin, NoVideoInTweet):
+                raise
+            except Exception as exc:
+                if _cancelled or not _is_network_error(exc):
+                    raise
+                attempt += 1
+                # 2, 4, 8, 16, 32, 60, 60, ... seconds
+                delay = min(60, 2 ** min(attempt, 6))
+                _emit("Waiting for connection… (resumes automatically)")
+                time.sleep(delay)
+                _check_cancel()
 
     try:
         info = _extract(fmt)

@@ -130,6 +130,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
+        findViewById<Button>(R.id.batteryButton).setOnClickListener { toggleBatteryOptimisation() }
+        refreshBatteryButton()
         findViewById<Button>(R.id.libraryButton).setOnClickListener {
             collapsePresets()
             startActivity(Intent(this, LibraryActivity::class.java))
@@ -327,6 +329,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     override fun onResume() {
         super.onResume()
         NavHelper.sync(this, R.id.tab_download)
+        refreshBatteryButton()
     }
 
     override fun onStart() {
@@ -366,6 +369,32 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
                 dlQuality.selectedItem?.toString() ?: "1080p",
                 exportSwitch.isChecked,
             )
+        }
+    }
+
+    /** Show whether Android is allowed to kill us, and offer to change it. */
+    private fun refreshBatteryButton() {
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        val btn = findViewById<Button>(R.id.batteryButton) ?: return
+        btn.text =
+            if (pm.isIgnoringBatteryOptimizations(packageName)) "Battery: unrestricted ✓"
+            else "Battery: restricted — tap to fix"
+    }
+
+    private fun toggleBatteryOptimisation() {
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            // Already exempt: send the user to the per-app battery screen so it
+            // can be inspected or reverted later.
+            val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:$packageName"))
+            runCatching { startActivity(i) }
+            return
+        }
+        val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        if (runCatching { startActivity(i) }.isFailure) {
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         }
     }
 

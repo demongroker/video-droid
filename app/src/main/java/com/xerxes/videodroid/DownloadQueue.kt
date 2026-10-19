@@ -6,7 +6,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-data class QueuedJob(val url: String, val opts: FormatOptions, val localPath: String = "")
+data class QueuedJob(
+    val url: String,
+    val opts: FormatOptions,
+    val localPath: String = "",
+    /** Last known download percentage (0-100); survives restarts. */
+    val progress: Int = 0,
+    /** Directory holding the resumable .part file for this item. */
+    val partialPath: String = "",
+)
 
 /**
  * FIFO job list persisted under filesDir/download_queue.json so a process death
@@ -56,6 +64,16 @@ object DownloadQueue {
         (loadLocked(ctx).size - 1).coerceAtLeast(0)
     }
 
+    /** Persist live progress for the item currently downloading (the head). */
+    fun setProgress(ctx: Context, progress: Int, partialPath: String) = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        if (jobs.isEmpty()) return@synchronized
+        val head = jobs[0]
+        if (head.progress == progress && head.partialPath == partialPath) return@synchronized
+        jobs[0] = head.copy(progress = progress.coerceIn(0, 100), partialPath = partialPath)
+        saveLocked(ctx, jobs)
+    }
+
     fun clear(ctx: Context) = synchronized(lock) {
         saveLocked(ctx, mutableListOf())
     }
@@ -86,6 +104,8 @@ object DownloadQueue {
                             exportEnabled = o.optBoolean("export", true),
                         ),
                         localPath = o.optString("local", ""),
+                        progress = o.optInt("progress", 0),
+                        partialPath = o.optString("partial", ""),
                     ),
                 )
             }
@@ -128,6 +148,8 @@ object DownloadQueue {
                     put("tend", j.opts.trimEnd)
                     put("export", j.opts.exportEnabled)
                     put("local", j.localPath)
+                    put("progress", j.progress)
+                    put("partial", j.partialPath)
                 },
             )
         }
