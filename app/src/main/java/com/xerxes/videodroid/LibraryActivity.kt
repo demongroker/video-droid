@@ -1,6 +1,7 @@
 package com.xerxes.videodroid
 
 import android.content.ContentUris
+import com.xerxes.videodroid.ui.Insets
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
