@@ -2,11 +2,14 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/tab_download"
+        android:icon="@drawable/ic_download"
         android:title="Download" />
     <item
         android:id="@+id/tab_queue"
+        android:icon="@drawable/ic_queue"
         android:title="Queue" />
     <item
         android:id="@+id/tab_library"
+        android:icon="@drawable/ic_library"
         android:title="Library" />
 </menu>

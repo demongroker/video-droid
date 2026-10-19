@@ -48,4 +48,9 @@ class QueueActivity : AppCompatActivity() {
             recreate()
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        NavHelper.sync(this, R.id.tab_queue)
+    }
 }

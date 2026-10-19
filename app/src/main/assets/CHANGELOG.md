@@ -2,6 +2,19 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.1 (versionCode 59)
+
+### Fixed
+- **Bottom bar showed the wrong tab on launch.** On a cold start the Download
+  screen was displayed but the Queue tab was highlighted, with an empty
+  active-indicator pill. The bar now takes its selection from the screen that
+  is actually on top (each activity passes its own tab id), re-asserting after
+  the view-state restore and again in `onResume`, so the highlight survives
+  cold start and back presses.
+- **Bottom bar had no icons.** Added Download, Queue and Library icons, tinted
+  by `colorPrimary` when selected and `colorOnSurfaceVariant` otherwise, with
+  the labels kept underneath and inside the indicator pill.
+
 ## 1.9.0 (versionCode 58)
 
 Phase 3 — Material 3 refresh. Still XML views, no Compose, no Hilt.

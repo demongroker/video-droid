@@ -324,6 +324,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        NavHelper.sync(this, R.id.tab_download)
+    }
+
     override fun onStart() {
         super.onStart()
         DownloadService.listener = this
