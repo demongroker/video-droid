@@ -2,6 +2,35 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.5 (versionCode 63)
+
+### Page fallback actually works on the phone
+
+1.9.4's sniffer found nothing on the phone (`timed out with no candidates`) even
+though a desktop fetch of the same page exposes everything. Diagnosis: the
+media URL only exists in the **static HTML** (a lazyloaded iframe plus a base64
+`?q=` player parameter) — a WebView on the device never got that far.
+
+- **Static HTML path runs first.** The page is fetched with `HttpURLConnection`
+  (desktop Chrome UA, Accept/Accept-Language/Referer, CookieManager jar,
+  redirects followed) and parsed by a new pure-Kotlin `MediaUrlParser`: iframe
+  `src` / `data-litespeed-src` / `data-src`, `<video>`/`<source>` src,
+  `og:video`, `twitter:player`, JSON-LD `contentUrl`/`embedUrl`, `file:` blobs,
+  and **base64 `?q=` payloads** (URL-safe alphabet and missing padding both
+  handled). Player/iframe URLs are fetched **one level deep** and parsed too.
+- **WebView is now only the fallback**, used when the static path finds nothing.
+- **Diagnostics in Copy log**: HTTP status, final URL after redirects, page
+  `<title>`, HTML length, Cloudflare/age/consent-wall detection, the iframe
+  list, the first 300 chars of the decoded `q` payload, per-frame fetch results
+  and which path won (`static` / `sniffer` / `iframe` / `generic` / `native`).
+- **Unit test in CI**: `MediaUrlParserTest` runs against a saved fixture of the
+  failing page shape and asserts the parser returns
+  `https://rikywohu.b-cdn.net/gretgrg.mp4`. `testDebugUnitTest` is now part of
+  the workflow.
+- Found URLs still go through yt-dlp with **Referer** (player iframe or page),
+  **Origin** and the desktop **User-Agent**, so partials, infinite retries and
+  the queue still apply.
+
 ## 1.9.4 (versionCode 62)
 
 ### Parallel downloads

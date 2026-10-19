@@ -75,6 +75,12 @@ jobs:
       # PR / branch builds: compile check + APK size report. No signing
       # secrets needed — the release APK is built unsigned when no keystore
       # is present, which is what we want for a size comparison.
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --no-daemon
+
       - name: Build debug + release (PR / branch)
         if: "!startsWith(github.ref, 'refs/tags/')"
         run: |

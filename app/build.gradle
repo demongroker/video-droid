@@ -14,8 +14,8 @@ android {
         applicationId "com.xerxes.videodroid"
         minSdk 24
         targetSdk 36
-        versionCode 62
-        versionName "1.9.4"
+        versionCode 63
+        versionName "1.9.5"
         ndk {
             abiFilters "arm64-v8a"
         }
@@ -129,6 +129,7 @@ dependencies {
     // WorkManager
     def work_version = "2.10.0"
     implementation "androidx.work:work-runtime-ktx:$work_version"
+    testImplementation 'junit:junit:4.13.2'
 
     // Room Database for DownloadQueue
     def room_version = "2.6.1"
