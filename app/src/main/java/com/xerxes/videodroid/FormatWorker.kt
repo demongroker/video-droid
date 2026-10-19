@@ -224,52 +224,92 @@ object FormatWorker {
                         generic.getOrElse { second ->
                             if (!isUnsupportedUrl(second)) throw second
 
-                            // Step 2: sniff the page in a hidden WebView.
-                            val sniff = PageSniffer.sniff(context, url) { msg -> emit(msg) }
+                            // Step 2a: STATIC HTML first. The interesting
+                            // markup is in the page source (lazyloaded iframe
+                            // + base64 ?q= player param), and a WebView adds
+                            // timing/ROM variables we cannot control.
+                            val page = StaticPageFetcher.fetch(context, url)
+                            JobDiag.noteStatus(
+                                "static: HTTP ${page.status} len=${page.length} " +
+                                    "title=${page.title.take(60)} " +
+                                    "blocked=${page.blocked ?: "-"} " +
+                                    "final=${page.finalUrl.take(90)} " +
+                                    "err=${page.error ?: "-"}",
+                            )
+                            val parsed = MediaUrlParser.parse(page.html)
+                            JobDiag.noteStatus(
+                                "decoded q: " + (parsed.decodedPayloads.firstOrNull()?.take(300) ?: "(none)"),
+                            )
+                            JobDiag.noteStatus("frames: " + parsed.frames.take(6).joinToString(" | "))
 
-                            // Embed hosts often DO have extractors: try the
-                            // iframes we discovered before falling back to the
-                            // raw media URL.
-                            var frameResult: String? = null
-                            for (frame in sniff.frames.distinct().take(4)) {
-                                val r = runCatching {
-                                    dlModule.callAttr(
-                                        "download", frame, opts.dlQuality, work.absolutePath,
-                                        "source", cookiePath, opts.exportEnabled,
-                                        null, url, PageSniffer.DESKTOP_UA, null, false,
-                                    ).toString()
-                                }
-                                if (r.isSuccess) {
-                                    frameResult = r.getOrNull()
-                                    usedPath = "iframe"
-                                    break
-                                }
-                            }
-
-                            if (frameResult != null) {
-                                frameResult
-                            } else {
-                                val found = sniff.media ?: run {
-                                    JobDiag.noteStatus("sniff: no media found")
-                                    JobDiag.noteStatus(
-                                        "candidates: " + sniff.candidates.take(15).joinToString(" | "),
-                                    )
-                                    JobDiag.noteStatus(
-                                        "frames: " + sniff.frames.take(10).joinToString(" | "),
-                                    )
-                                    throw NoMediaOnPageException()
-                                }
-                                emit("Found video on page — downloading…")
-                                usedPath = "sniffer"
-                                JobDiag.noteStatus(
-                                    "fallback: host=" + runCatching { android.net.Uri.parse(found.url).host }.getOrNull(),
+                            val candidates = parsed.media.toMutableList()
+                            // One level deep: player-x.php / embed iframes.
+                            for (frame in parsed.frames.take(3)) {
+                                val sub = StaticPageFetcher.fetchRaw(
+                                    context, frame, referer = page.finalUrl, depth = 1,
                                 )
-                                dlModule.callAttr(
-                                    "download", found.url, opts.dlQuality, work.absolutePath,
-                                    "source", cookiePath, opts.exportEnabled,
-                                    null, found.referer, found.userAgent, found.title, false,
-                                ).toString()
+                                val subParsed = MediaUrlParser.parse(sub.html)
+                                candidates.addAll(subParsed.media)
+                                JobDiag.noteStatus(
+                                    "frame: HTTP ${sub.status} len=${sub.length} " +
+                                        "media=${subParsed.media.size} err=${sub.error ?: "-"}",
+                                )
                             }
+
+                            var refererForDl = page.finalUrl
+                            var found = MediaUrlParser.pickBest(candidates)?.let { mediaUrl ->
+                                SniffedMedia(mediaUrl, page.title, page.finalUrl, PageSniffer.DESKTOP_UA)
+                            }
+                            if (found != null) usedPath = "static"
+
+                            // Step 2b: only now bother with the WebView.
+                            if (found == null) {
+                                emit("Searching page for video…")
+                                val sniff = PageSniffer.sniff(context, url) { msg -> emit(msg) }
+                                found = sniff.media
+                                if (found != null) {
+                                    refererForDl = found.referer
+                                    usedPath = "sniffer"
+                                } else {
+                                    JobDiag.noteStatus(
+                                        "sniff: no media. candidates=" +
+                                            sniff.candidates.take(15).joinToString(" | "),
+                                    )
+                                    JobDiag.noteStatus(
+                                        "sniff frames=" + sniff.frames.take(10).joinToString(" | "),
+                                    )
+                                    // Last resort: let yt-dlp try the embeds.
+                                    var frameResult: String? = null
+                                    for (frame in (sniff.frames + parsed.frames).distinct().take(4)) {
+                                        val r = runCatching {
+                                            dlModule.callAttr(
+                                                "download", frame, opts.dlQuality, work.absolutePath,
+                                                "source", cookiePath, opts.exportEnabled,
+                                                null, url, PageSniffer.DESKTOP_UA, null, false,
+                                            ).toString()
+                                        }
+                                        if (r.isSuccess) {
+                                            frameResult = r.getOrNull()
+                                            usedPath = "iframe"
+                                            break
+                                        }
+                                    }
+                                    if (frameResult == null) throw NoMediaOnPageException()
+                                    return@getOrElse frameResult
+                                }
+                            }
+
+                            emit("Found video on page — downloading…")
+                            JobDiag.noteStatus(
+                                "fallback: path=$usedPath host=" +
+                                    runCatching { android.net.Uri.parse(found.url).host }.getOrNull(),
+                            )
+                            val resolved = found ?: throw NoMediaOnPageException()
+                            dlModule.callAttr(
+                                "download", resolved.url, opts.dlQuality, work.absolutePath,
+                                "source", cookiePath, opts.exportEnabled,
+                                null, refererForDl, resolved.userAgent, resolved.title, false,
+                            ).toString()
                         }
                     }
                 } finally {
