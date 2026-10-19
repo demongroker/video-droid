@@ -2,6 +2,32 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.4 (versionCode 62)
+
+### Parallel downloads
+
+- **Up to N at once** (default **3**, setting **1–5** under *More →
+  Simultaneous downloads*). The queue now hands out **claims**: a worker takes
+  the next unclaimed item, and the claim is released when it finishes. Claims
+  are in-memory, so a process death releases everything and a restart resumes.
+- **Each item has a stable id** and its own partial directory, so parallel
+  transfers never fight over the same `.part` file.
+- **FFmpeg still runs one at a time.** The converter is behind a global lock;
+  a worker that reaches it shows *"Waiting for converter…"* while another job
+  encodes. Downloads keep running in parallel meanwhile.
+- **Queue tab** rebuilt: every row shows live progress and its own **Cancel**
+  (stop if running, remove if waiting). **Cancel all** stops everything, clears
+  the queue and asks for confirmation first.
+- **Download card** shows how many items are running and how many are queued.
+- **No duplicates**: enqueuing a URL that is already queued is rejected with
+  *"Already in queue"*.
+- **Shared links go straight to the queue** using the current settings — no
+  quality sheet blocking the flow.
+- **Persistence**: unfinished items resume on app start and `BOOT_COMPLETED`,
+  up to the configured parallelism.
+- Notification shows a summary ("Downloading 2 · 3 queued") alongside the
+  current stage.
+
 ## 1.9.3 (versionCode 61)
 
 ### Fallback for sites yt-dlp has no extractor for

@@ -23,8 +23,10 @@ class DownloadService : Service() {
         fun onFinished(result: FormatResult)
     }
 
-    @Volatile
-    private var workerThread: Thread? = null
+    /** Live worker threads, one per in-flight download (bounded by the user's setting). */
+    private val workerThreads = java.util.Collections.synchronizedSet(HashSet<Thread>())
+
+    private val liveStatus = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     @Volatile
     private var lastJobLine: String = "Starting..."
@@ -82,7 +84,7 @@ class DownloadService : Service() {
             ACTION_CANCEL -> {
                 FormatWorker.requestCancel()
                 workerThread?.interrupt()
-                publish("Cancelling...")
+                publishGlobal("Cancelling...")
             }
             ACTION_START -> {
                 val url = intent.getStringExtra(EXTRA_URL)
@@ -97,7 +99,7 @@ class DownloadService : Service() {
                         trimEnd = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TEND, 1)),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
                     )
-                    DownloadQueue.enqueue(
+                    val added = DownloadQueue.enqueue(
                         applicationContext,
                         QueuedJob(
                             url = url.orEmpty(),
@@ -105,6 +107,7 @@ class DownloadService : Service() {
                             localPath = intent.getStringExtra(EXTRA_LOCAL_PATH).orEmpty(),
                         ),
                     )
+                    if (added < 0) publishGlobal("Already in queue")
                 }
                 ensurePump()
             }
@@ -120,64 +123,77 @@ class DownloadService : Service() {
         return START_STICKY
     }
 
+    private fun maxParallel(): Int =
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getInt(KEY_PARALLEL, DEFAULT_PARALLEL)
+            .coerceIn(1, 5)
+
+    /** Keep the pool topped up: claim work until the limit, then run it. */
     private fun ensurePump() {
-        startInForeground(composeNotif(lastJobLine))
+        startInForeground(composeNotif(summaryLine()))
         synchronized(pumpLock) {
-            val live = workerThread
-            if (live != null && live.isAlive) {
-                publish(lastJobLine)
-                return
+            val limit = maxParallel()
+            while (workerThreads.size < limit) {
+                val next = DownloadQueue.claimNext(applicationContext) ?: break
+                liveStatus[next.id] = "Starting..."
+                val t = Thread { runOne(next) }
+                t.isDaemon = true
+                workerThreads.add(t)
+                t.start()
             }
-            val job = Thread { pumpLoop() }
-            workerThread = job
-            job.start()
         }
+        maybeStopWhenIdle()
     }
 
-    private fun pumpLoop() {
+    /** One claimed item: download (and export) it, then release the claim. */
+    private fun runOne(job: QueuedJob) {
         try {
-            while (true) {
-                val next = DownloadQueue.peek(applicationContext)
-                if (next == null) {
-                    synchronized(pumpLock) {
-                        if (DownloadQueue.size(applicationContext) == 0 &&
-                            Thread.currentThread() === workerThread
-                        ) {
-                            workerThread = null
-                            stopForeground(STOP_FOREGROUND_REMOVE)
-                            stopSelf()
-                            return
-                        }
-                    }
-                    continue
-                }
-                lastJobLine = "Starting..."
-                publish(lastJobLine)
-                val res = try {
-                    FormatWorker.run(applicationContext, next.url, next.opts, { msg ->
-                        lastJobLine = msg
-                        publish(msg)
-                    }, next.localPath)
-                } catch (t: Throwable) {
-                    FormatResult(false, t.message ?: "Failed")
-                }
-                DownloadQueue.finish(applicationContext, next.id)
-                listener?.onFinished(res)
+            publish(job.id, "Starting...")
+            val res = try {
+                FormatWorker.run(
+                    applicationContext, job.url, job.opts,
+                    { msg -> publish(job.id, msg) },
+                    job.localPath, job.id,
+                )
+            } catch (t: Throwable) {
+                FormatResult(false, t.message ?: "Failed")
             }
-        } catch (t: Throwable) {
+            DownloadQueue.finish(applicationContext, job.id)
+            liveStatus.remove(job.id)
+            listener?.onFinished(res)
+        } catch (_: Throwable) {
+            runCatching { DownloadQueue.finish(applicationContext, job.id) }
+        } finally {
             synchronized(pumpLock) {
-                if (Thread.currentThread() === workerThread) workerThread = null
+                workerThreads.remove(Thread.currentThread())
             }
-            if (DownloadQueue.size(applicationContext) > 0) ensurePump()
-            else {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+            runCatching { ensurePump() }
         }
     }
 
-    private fun withJobDetail(jobLine: String): String {
-        val opts = DownloadQueue.peek(applicationContext)?.opts ?: return jobLine
+    private fun maybeStopWhenIdle() {
+        synchronized(pumpLock) {
+            if (workerThreads.isNotEmpty()) return
+            if (DownloadQueue.size(applicationContext) > 0) return
+            DownloadQueue.releaseAllClaims()
+            liveStatus.clear()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private fun summaryLine(): String {
+        val running = DownloadQueue.inFlightIds().size
+        val waiting = DownloadQueue.waiting(applicationContext)
+        val parts = ArrayList<String>()
+        if (running > 0) parts.add("Downloading $running")
+        if (waiting > 0) parts.add("$waiting queued")
+        return if (parts.isEmpty()) lastJobLine else parts.joinToString(" · ")
+    }
+
+    private fun withJobDetail(jobLine: String, id: String? = null): String {
+        val opts = (if (id != null) DownloadQueue.get(applicationContext, id)?.opts else null)
+            ?: DownloadQueue.peek(applicationContext)?.opts ?: return jobLine
         if (jobLine.contains(" · trim ")) return jobLine
         val active = jobLine.contains("Downloading") ||
             jobLine.contains("Converting") ||
@@ -188,25 +204,35 @@ class DownloadService : Service() {
         return "$jobLine\n${opts.statusDetail()}"
     }
 
-    private fun publish(jobLine: String) {
-        val detailed = withJobDetail(jobLine)
-        val waiting = DownloadQueue.waiting(applicationContext)
-        val ui = if (waiting > 0) "Queued ($waiting)\n$detailed" else detailed
-        persistProgress(jobLine)
-        updateNotification(composeNotif(detailed, waiting))
-        listener?.onStatus(ui)
+    /** Per-item status update: drives the summary notification and the UI. */
+    private fun publish(id: String, jobLine: String) {
+        lastJobLine = jobLine
+        liveStatus[id] = jobLine
+        persistProgress(id, jobLine)
+        val summary = summaryLine()
+        updateNotification(composeNotif(withJobDetail(jobLine, id), summary))
+        listener?.onStatus("$summary\n${withJobDetail(jobLine, id)}")
+    }
+
+    /** Status that is not tied to one item (start/cancel messages). */
+    private fun publishGlobal(jobLine: String) {
+        lastJobLine = jobLine
+        updateNotification(composeNotif(jobLine, summaryLine()))
+        listener?.onStatus(jobLine)
     }
 
     private var lastPersistedPct = -1
 
     /** Remember how far this item got, so a restart can resume and show it. */
-    private fun persistProgress(jobLine: String) {
+    private val lastPersistedPct = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    private fun persistProgress(id: String, jobLine: String) {
         val pct = JOB_PCT.find(jobLine)?.groupValues?.get(1)?.toIntOrNull() ?: return
-        if (pct == lastPersistedPct) return
-        lastPersistedPct = pct
-        val head = DownloadQueue.peek(applicationContext) ?: return
-        val dir = FormatWorker.partialDirFor(applicationContext, head.url, head.localPath)
-        DownloadQueue.setProgress(applicationContext, head.id, pct, dir.absolutePath)
+        if (lastPersistedPct[id] == pct) return
+        lastPersistedPct[id] = pct
+        val job = DownloadQueue.get(applicationContext, id) ?: return
+        val dir = FormatWorker.partialDirFor(applicationContext, job.url, job.localPath)
+        DownloadQueue.setProgress(applicationContext, id, pct, dir.absolutePath)
     }
 
     // ---- connectivity ----
@@ -244,9 +270,10 @@ class DownloadService : Service() {
         netCallback = null
     }
 
-    private fun composeNotif(jobLine: String, waiting: Int = DownloadQueue.waiting(applicationContext)): String {
-        return if (waiting > 0) "$jobLine · $waiting waiting" else jobLine
-    }
+    private fun composeNotif(jobLine: String, summary: String): String =
+        if (summary.isBlank() || summary == jobLine) jobLine else "$summary\n$jobLine"
+
+
 
     private fun startInForeground(msg: String) {
         ensureChannel()
@@ -302,6 +329,10 @@ class DownloadService : Service() {
     }
 
     companion object {
+        private const val PREFS = "videodroid"
+        const val KEY_PARALLEL = "parallel_downloads"
+        const val DEFAULT_PARALLEL = 3
+
         private val JOB_PCT =
             Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""")
 

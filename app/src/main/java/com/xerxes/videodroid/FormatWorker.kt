@@ -47,6 +47,8 @@ data class FormatOptions(
     }
 
     companion object {
+        private val CONVERT_LOCK = java.util.concurrent.locks.ReentrantLock()
+
         const val DEFAULT_TRIM_S = 1
         /** Per-side cap so corrupt prefs cannot feed insane -ss/-t. */
         const val MAX_TRIM_S = 86_400
@@ -131,6 +133,7 @@ object FormatWorker {
         opts: FormatOptions,
         status: (String) -> Unit,
         localPath: String? = null,
+        id: String = "",
     ): FormatResult {
         cancelRequested.set(false)
         JobDiag.beginJob(opts)
@@ -551,6 +554,25 @@ object FormatWorker {
      * Throttle ~2% or 500ms. Cancel uses FFmpegKit.cancel(sessionId) for this job only.
      */
     private fun executeConvert(
+        args: Array<String>,
+        expectedMs: Double,
+        status: (String) -> Unit,
+        label: String = "Converting",
+    ): com.arthenica.ffmpegkit.FFmpegSession {
+        // Downloads run in parallel, the converter does not: one FFmpeg session
+        // at a time, whatever the queue is doing.
+        if (!CONVERT_LOCK.tryLock()) {
+            status("Waiting for converter…")
+            CONVERT_LOCK.lock()
+        }
+        try {
+            return executeConvertLocked(args, expectedMs, status, label)
+        } finally {
+            CONVERT_LOCK.unlock()
+        }
+    }
+
+    private fun executeConvertLocked(
         args: Array<String>,
         expectedMs: Double,
         status: (String) -> Unit,
