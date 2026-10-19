@@ -255,16 +255,16 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <ProgressBar
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
                         android:id="@+id/jobProgress"
-                        style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="match_parent"
                         android:layout_height="6dp"
                         android:layout_marginTop="14dp"
                         android:max="100"
-                        android:progressTint="@color/vd_violet"
-                        android:progressBackgroundTint="@color/vd_outline"
-                        android:visibility="gone" />
+                        android:visibility="gone"
+                        app:indicatorColor="@color/vd_violet"
+                        app:trackColor="@color/vd_outline"
+                        app:trackThickness="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -300,11 +300,10 @@
                 android:textAllCaps="false"
                 android:textColor="@color/vd_text_dim" />
 
-            <LinearLayout
+            <com.google.android.material.chip.ChipGroup
                 android:id="@+id/presetsExpanded"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
                 android:visibility="gone">
 
                 <LinearLayout
@@ -380,7 +379,7 @@
                         android:layout_weight="1"
                         android:text="Facebook" />
                 </LinearLayout>
-            </LinearLayout>
+            </com.google.android.material.chip.ChipGroup>
 
             <!-- ── More (collapsed) ──────────────────────────────────── -->
             <com.google.android.material.button.MaterialButton
@@ -415,7 +414,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
+                    <Switch
                         android:id="@+id/exportSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
@@ -459,7 +458,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
+                    <Switch
                         android:id="@+id/trimSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />

@@ -2,6 +2,35 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.0.1 (versionCode 65)
+
+### Startup crash fixed
+
+v2.0.0 died instantly on Xiaomi/HyperOS ("VideoDroid keeps stopping"). Cause: the
+redesigned layout used different view classes than the screen code casts to, so
+`findViewById` threw `ClassCastException` while the activity was still inflating —
+before any frame could be drawn.
+
+- `exportSwitch` / `trimSwitch`: `SwitchMaterial` -> `android.widget.Switch`
+- `jobProgress`: `ProgressBar` -> `Material LinearProgressIndicator`
+- `presetsExpanded`: `LinearLayout` -> `Material ChipGroup`
+
+### Crash catcher
+Uncaught exceptions are now saved to app storage. On the next launch the app
+opens a plain **"VideoDroid hit an error"** screen with the full stack trace,
+device/Android/version header, **Copy log** and **Dismiss and continue**. No adb
+needed.
+
+### Hardening
+- Clipboard is only read once the window has focus, and a failed read can never
+  throw (some OEM builds deny or throw instead of returning null).
+- Startup view wiring cannot abort `onCreate`.
+
+### CI
+Robolectric launch smoke tests: `MainActivity` on a clean install, `MainActivity`
+with 1.9.5-style saved prefs and a persisted queue, and `LibraryActivity`. These
+reproduced the crash before the fix and must stay green.
+
 ## 2.0.0 (versionCode 64)
 
 ### Redesign
