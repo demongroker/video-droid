@@ -50,6 +50,12 @@
             android:exported="false"
             android:label="Queue" />
         <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
             android:name=".LibraryActivity"
             android:exported="false"
             android:label="Library" />

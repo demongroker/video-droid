@@ -255,16 +255,16 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <ProgressBar
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
                         android:id="@+id/jobProgress"
-                        style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="match_parent"
                         android:layout_height="6dp"
                         android:layout_marginTop="14dp"
                         android:max="100"
-                        android:progressTint="@color/vd_violet"
-                        android:progressBackgroundTint="@color/vd_outline"
-                        android:visibility="gone" />
+                        android:visibility="gone"
+                        app:indicatorColor="@color/vd_violet"
+                        app:trackColor="@color/vd_outline"
+                        app:trackThickness="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -300,87 +300,55 @@
                 android:textAllCaps="false"
                 android:textColor="@color/vd_text_dim" />
 
-            <LinearLayout
+            <com.google.android.material.chip.ChipGroup
                 android:id="@+id/presetsExpanded"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
                 android:visibility="gone">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetX"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetX"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="X" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetTikTok"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:text="TikTok" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetShorts"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:text="Shorts" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
+                    android:text="X" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetTikTok"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetReels"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Reels" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetInstagram"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:text="Instagram" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetYouTube"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:text="YouTube" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/presetFacebook"
-                        style="@style/Widget.VideoDroid.Pill"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:text="Facebook" />
-                </LinearLayout>
-            </LinearLayout>
+                    android:text="TikTok" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetShorts"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Shorts" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetReels"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Reels" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetInstagram"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Instagram" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetYouTube"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="YouTube" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/presetFacebook"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Facebook" />
+            </com.google.android.material.chip.ChipGroup>
 
             <!-- ── More (collapsed) ──────────────────────────────────── -->
             <com.google.android.material.button.MaterialButton
@@ -415,7 +383,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
+                    <android.widget.Switch
                         android:id="@+id/exportSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
@@ -459,7 +427,7 @@
                         android:textColor="@color/vd_text"
                         android:textSize="14sp" />
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
+                    <android.widget.Switch
                         android:id="@+id/trimSwitch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content" />
@@ -643,7 +611,7 @@
         </LinearLayout>
     </ScrollView>
 
-    <include
-        android:id="@+id/bottomNavHost"
-        layout="@layout/bottom_nav" />
+    <!-- No android:id here: an include id would override the included root's
+         id (bottomNav) and findViewById(R.id.bottomNav) would return null. -->
+    <include layout="@layout/bottom_nav" />
 </LinearLayout>
