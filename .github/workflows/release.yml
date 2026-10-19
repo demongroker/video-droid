@@ -176,3 +176,61 @@ jobs:
             dist/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  screenshots:
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Python (Chaquopy build host)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Assemble debug APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon -PchaquopyBuildPython="$(which python3)"
+          ls -l app/build/outputs/apk/debug/
+
+      - name: Capture each tab on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            set -e
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            mkdir -p screenshots
+            adb shell am start -n com.xerxes.videodroid/.MainActivity
+            sleep 5
+            W=$(adb shell wm size | sed 's/.*: //' | cut -dx -f1)
+            H=$(adb shell wm size | sed 's/.*: //' | cut -dx -f2)
+            Y=$((H - 60))
+            adb exec-out screencap -p > screenshots/01-download.png
+            adb shell input tap $((W/6)) $Y;     sleep 3
+            adb exec-out screencap -p > screenshots/02-queue.png
+            adb shell input tap $((W*5/6)) $Y;   sleep 3
+            adb exec-out screencap -p > screenshots/03-library.png
+            adb shell input tap $((W/2)) $Y;     sleep 3
+            adb exec-out screencap -p > screenshots/04-download-again.png
+            ls -l screenshots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: videodroid-screenshots
+          path: screenshots
+          if-no-files-found: warn
