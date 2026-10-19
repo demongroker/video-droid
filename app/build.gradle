@@ -167,3 +167,10 @@ dependencies {
     // Serialization
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
 }
+// Print full stack traces for failing unit tests (Robolectric launch tests).
+tasks.withType(Test).configureEach {
+    testLogging {
+        exceptionFormat = "full"
+        events "failed"
+    }
+}
