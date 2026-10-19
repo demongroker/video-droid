@@ -65,7 +65,7 @@ object StaticPageFetcher {
             val html = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             val finalUrl = conn.url?.toString() ?: url
-            val title = Regex("""<title[^>]*>(.*?)</title>""", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+            val title = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(html)?.groupValues?.get(1)?.trim().orEmpty()
             val blocked = detectBlock(html, status)
 
