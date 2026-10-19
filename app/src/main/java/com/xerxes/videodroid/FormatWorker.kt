@@ -68,6 +68,9 @@ data class FormatOptions(
     }
 }
 
+/** One FFmpeg session at a time, however many downloads run in parallel. */
+private val CONVERT_LOCK = java.util.concurrent.locks.ReentrantLock()
+
 object FormatWorker {
     private val cancelRequested = AtomicBoolean(false)
     /** Active FFmpeg session only — never FFmpegKit.cancel() with no id. */
@@ -131,6 +134,7 @@ object FormatWorker {
         opts: FormatOptions,
         status: (String) -> Unit,
         localPath: String? = null,
+        id: String = "",
     ): FormatResult {
         cancelRequested.set(false)
         JobDiag.beginJob(opts)
@@ -221,18 +225,51 @@ object FormatWorker {
                             if (!isUnsupportedUrl(second)) throw second
 
                             // Step 2: sniff the page in a hidden WebView.
-                            val found = PageSniffer.sniff(context, url)
-                                ?: throw NoMediaOnPageException()
-                            emit("Found video on page — downloading…")
-                            usedPath = "sniffer"
-                            JobDiag.noteStatus(
-                                "fallback: host=${runCatching { android.net.Uri.parse(found.url).host }.getOrNull()}",
-                            )
-                            dlModule.callAttr(
-                                "download", found.url, opts.dlQuality, work.absolutePath,
-                                "source", cookiePath, opts.exportEnabled,
-                                null, found.referer, found.userAgent, found.title, false,
-                            ).toString()
+                            val sniff = PageSniffer.sniff(context, url) { msg -> emit(msg) }
+
+                            // Embed hosts often DO have extractors: try the
+                            // iframes we discovered before falling back to the
+                            // raw media URL.
+                            var frameResult: String? = null
+                            for (frame in sniff.frames.distinct().take(4)) {
+                                val r = runCatching {
+                                    dlModule.callAttr(
+                                        "download", frame, opts.dlQuality, work.absolutePath,
+                                        "source", cookiePath, opts.exportEnabled,
+                                        null, url, PageSniffer.DESKTOP_UA, null, false,
+                                    ).toString()
+                                }
+                                if (r.isSuccess) {
+                                    frameResult = r.getOrNull()
+                                    usedPath = "iframe"
+                                    break
+                                }
+                            }
+
+                            if (frameResult != null) {
+                                frameResult
+                            } else {
+                                val found = sniff.media ?: run {
+                                    JobDiag.noteStatus("sniff: no media found")
+                                    JobDiag.noteStatus(
+                                        "candidates: " + sniff.candidates.take(15).joinToString(" | "),
+                                    )
+                                    JobDiag.noteStatus(
+                                        "frames: " + sniff.frames.take(10).joinToString(" | "),
+                                    )
+                                    throw NoMediaOnPageException()
+                                }
+                                emit("Found video on page — downloading…")
+                                usedPath = "sniffer"
+                                JobDiag.noteStatus(
+                                    "fallback: host=" + runCatching { android.net.Uri.parse(found.url).host }.getOrNull(),
+                                )
+                                dlModule.callAttr(
+                                    "download", found.url, opts.dlQuality, work.absolutePath,
+                                    "source", cookiePath, opts.exportEnabled,
+                                    null, found.referer, found.userAgent, found.title, false,
+                                ).toString()
+                            }
                         }
                     }
                 } finally {
@@ -551,6 +588,25 @@ object FormatWorker {
      * Throttle ~2% or 500ms. Cancel uses FFmpegKit.cancel(sessionId) for this job only.
      */
     private fun executeConvert(
+        args: Array<String>,
+        expectedMs: Double,
+        status: (String) -> Unit,
+        label: String = "Converting",
+    ): com.arthenica.ffmpegkit.FFmpegSession {
+        // Downloads run in parallel, the converter does not: one FFmpeg session
+        // at a time, whatever the queue is doing.
+        if (!CONVERT_LOCK.tryLock()) {
+            status("Waiting for converter…")
+            CONVERT_LOCK.lock()
+        }
+        try {
+            return executeConvertLocked(args, expectedMs, status, label)
+        } finally {
+            CONVERT_LOCK.unlock()
+        }
+    }
+
+    private fun executeConvertLocked(
         args: Array<String>,
         expectedMs: Double,
         status: (String) -> Unit,

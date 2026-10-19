@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
+        setupParallelSpinner()
         findViewById<Button>(R.id.batteryButton).setOnClickListener { toggleBatteryOptimisation() }
         refreshBatteryButton()
         findViewById<Button>(R.id.libraryButton).setOnClickListener {
@@ -362,13 +363,31 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             applyAspectModeUi()
             suppressPersist = false
         }
-        // Let the user pick quality/format before anything is queued.
+        // 1.9.4: a shared link goes straight to the queue using the current
+        // settings — no sheet, no blocking, so parallel downloads can start
+        // while the user is still in the other app.
         if (url.isNotBlank()) {
-            showShareSheet(
-                url,
-                dlQuality.selectedItem?.toString() ?: "1080p",
-                exportSwitch.isChecked,
-            )
+            persistCurrent(custom = false)
+            launchJob(url)
+        }
+    }
+
+    /** 1-5 simultaneous downloads, persisted and read by DownloadService. */
+    private fun setupParallelSpinner() {
+        val spinner = findViewById<Spinner>(R.id.parallelSpinner)
+        val values = (1..5).map { "$it at a time" }
+        ArrayAdapter(this, R.layout.spinner_item, values).also {
+            it.setDropDownViewResource(R.layout.spinner_dropdown_item)
+            spinner.adapter = it
+        }
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val saved = prefs.getInt(DownloadService.KEY_PARALLEL, DownloadService.DEFAULT_PARALLEL)
+        spinner.setSelection((saved - 1).coerceIn(0, values.size - 1))
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                prefs.edit().putInt(DownloadService.KEY_PARALLEL, position + 1).apply()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 
