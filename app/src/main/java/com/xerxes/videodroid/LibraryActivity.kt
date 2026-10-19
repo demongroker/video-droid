@@ -144,4 +144,9 @@ class LibraryActivity : AppCompatActivity() {
     companion object {
         private const val OUT_DIR = "VideoDroid"
     }
+
+    override fun onResume() {
+        super.onResume()
+        NavHelper.sync(this, R.id.tab_library)
+    }
 }
