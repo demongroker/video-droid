@@ -218,7 +218,14 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        dlQuality.onItemSelectedListener = persistListener
+        dlQuality.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                persistCurrent(custom = true)
+                clearRecommendedNotice()
+                syncQualityPills(position)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
         aspectMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 applyAspectModeUi()
@@ -228,6 +235,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         aspectRatio.onItemSelectedListener = persistListener
+        wireV2Controls()
 
         findViewById<Button>(R.id.recommendedButton).setOnClickListener {
             collapsePresets()
@@ -328,6 +336,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     override fun onResume() {
+        autoFillFromClipboard()
         super.onResume()
         NavHelper.sync(this, R.id.tab_download)
         refreshBatteryButton()
@@ -613,6 +622,62 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         applyExportUi(exportSwitch.isChecked)
         applyAspectModeUi()
         statusText = "Restored your last settings"
+    }
+
+
+    private val qualityPillIds = intArrayOf(R.id.q4k, R.id.q1080, R.id.q720, R.id.q480)
+
+    private fun syncQualityPills(position: Int) {
+        val group = findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(
+            R.id.qualityPills,
+        ) ?: return
+        val target = qualityPillIds.getOrNull(position) ?: R.id.q1080
+        if (group.checkedButtonId != target) group.check(target)
+    }
+
+    private fun clipboardUrl(): String? {
+        val cm = getSystemService(ClipboardManager::class.java) ?: return null
+        val text = cm.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(this)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        return text.takeIf { it.startsWith("http") }
+    }
+
+    private fun wireV2Controls() {
+        findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(
+            R.id.qualityPills,
+        )?.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val idx = qualityPillIds.indexOf(checkedId)
+            if (idx >= 0 && dlQuality.selectedItemPosition != idx) dlQuality.setSelection(idx)
+        }
+        syncQualityPills(dlQuality.selectedItemPosition)
+
+        findViewById<View>(R.id.pasteButton)?.setOnClickListener {
+            val link = clipboardUrl()
+            if (link != null) {
+                urlInput.setText(link)
+                urlInput.setSelection(urlInput.text.length)
+            } else {
+                Toast.makeText(this, "No link in clipboard", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // The Options button reveals the advanced controls.
+        findViewById<View>(R.id.optionsButton)?.setOnClickListener {
+            if (moreSection.visibility != View.VISIBLE) moreToggle.performClick()
+        }
+    }
+
+    /** Offer a copied link as soon as the screen becomes visible again. */
+    private fun autoFillFromClipboard() {
+        if (!::urlInput.isInitialized) return
+        if (urlInput.text.isNotBlank()) return
+        clipboardUrl()?.let { urlInput.setText(it) }
     }
 
     private fun applySocialPreset(name: String, exportOn: Boolean, quality: String, mode: String, ratio: String) {

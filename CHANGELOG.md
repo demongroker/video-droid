@@ -2,6 +2,35 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.0.0 (versionCode 64)
+
+### Redesign
+
+- **AMOLED black** UI with **violet** primary and **emerald** accent. Fixed brand
+  palette instead of wallpaper dynamic colour, so it looks the same on every
+  phone. Pill and card styles throughout.
+- **Download screen rebuilt**: paste bar with a clipboard button (a copied link
+  is offered automatically when you come back to the screen), full-width
+  Download button, **quality pills** (4K / 1080 / 720 / 480) instead of a
+  dropdown, and a **progress card** with a thumbnail slot, status, speed/ETA
+  line and a violet bar.
+- **Library is now a thumbnail grid** with real MediaStore thumbnails, a
+  **storage bar** (free / total / used %) and an empty state. Tap to play,
+  long-press to share.
+- Advanced controls (convert for social, aspect, trim, simultaneous downloads,
+  battery, local file, open page, X login, diagnostics) live under **More**,
+  reachable from the **Options** button.
+- Bottom-bar icons and labels unchanged from 1.9.1.
+
+### Not in this release
+- The Options control reveals the existing More panel rather than a separate
+  bottom sheet.
+- Queue rows keep the 1.9.4 card layout; swipe actions are not in this build.
+
+### Unchanged
+Download, resume, parallel-download, page-fallback, signing and updater logic
+are untouched by this release. All unit tests stay green.
+
 ## 1.9.5 (versionCode 63)
 
 ### Page fallback actually works on the phone

@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark-mode fallback when dynamic colour is unavailable (< Android 12). -->
-    <color name="primary">#9FA8DA</color>
-    <color name="onPrimary">#1A237E</color>
+    <!-- Same palette at night: the app is AMOLED black in both modes. -->
+    <color name="primary">#A78BFA</color>
+    <color name="onPrimary">#1C0E3A</color>
+    <color name="secondary">#34D399</color>
+    <color name="onSecondary">#00251A</color>
+
+    <color name="vd_bg">#000000</color>
+    <color name="vd_surface">#0E0E13</color>
+    <color name="vd_surface_high">#16161D</color>
+    <color name="vd_outline">#2A2A35</color>
+    <color name="vd_violet">#A78BFA</color>
+    <color name="vd_violet_soft">#C4B5FD</color>
+    <color name="vd_emerald">#34D399</color>
+    <color name="vd_text">#EDEDF2</color>
+    <color name="vd_text_dim">#9A9AAB</color>
+    <color name="vd_danger">#F87171</color>
 </resources>
