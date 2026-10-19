@@ -195,14 +195,51 @@ object FormatWorker {
                 }
                 poller.isDaemon = true
                 poller.start()
+                val dlModule = py.getModule("dl")
+                var usedPath = "native"
                 val result = try {
-                    py.getModule("dl")
-                        .callAttr("download", url, opts.dlQuality, work.absolutePath, "source", cookiePath, opts.exportEnabled)
-                        .toString()
+                    val native = runCatching {
+                        dlModule.callAttr(
+                            "download", url, opts.dlQuality, work.absolutePath,
+                            "source", cookiePath, opts.exportEnabled,
+                        ).toString()
+                    }
+                    native.getOrElse { first ->
+                        if (!isUnsupportedUrl(first)) throw first
+
+                        emit("Site not supported — trying page fallback…")
+                        // Step 1: let yt-dlp's generic extractor try the page.
+                        usedPath = "generic"
+                        val generic = runCatching {
+                            dlModule.callAttr(
+                                "download", url, opts.dlQuality, work.absolutePath,
+                                "source", cookiePath, opts.exportEnabled,
+                                null, null, null, null, true,
+                            ).toString()
+                        }
+                        generic.getOrElse { second ->
+                            if (!isUnsupportedUrl(second)) throw second
+
+                            // Step 2: sniff the page in a hidden WebView.
+                            val found = PageSniffer.sniff(context, url)
+                                ?: throw NoMediaOnPageException()
+                            emit("Found video on page — downloading…")
+                            usedPath = "sniffer"
+                            JobDiag.noteStatus(
+                                "fallback: host=${runCatching { android.net.Uri.parse(found.url).host }.getOrNull()}",
+                            )
+                            dlModule.callAttr(
+                                "download", found.url, opts.dlQuality, work.absolutePath,
+                                "source", cookiePath, opts.exportEnabled,
+                                null, found.referer, found.userAgent, found.title, false,
+                            ).toString()
+                        }
+                    }
                 } finally {
                     pollerStop.set(true)
                     poller.interrupt()
                 }
+                JobDiag.noteStatus("fallback path: $usedPath")
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 val info = JSONObject(result)
                 val dl = File(info.getString("path"))
@@ -427,9 +464,30 @@ object FormatWorker {
         }
     }
 
+    /** True when yt-dlp has no extractor for this site. */
+    private fun isUnsupportedUrl(t: Throwable): Boolean {
+        var cur: Throwable? = t
+        var guard = 0
+        while (cur != null && guard++ < 6) {
+            val m = (cur.message ?: "").lowercase()
+            if (m.contains("unsupported url") || m.contains("unsupported site") ||
+                m.contains("no suitable extractor") || m.contains("no extractor")
+            ) {
+                return true
+            }
+            cur = cur.cause
+        }
+        return false
+    }
+
+    private class NoMediaOnPageException : Exception("No downloadable video found on this page")
+
     fun mapError(raw: String): String {
         val s = raw.lowercase()
         if (s.contains("cancel")) return "Cancelled"
+        if (s.contains("no downloadable video")) {
+            return "No downloadable video found on this page"
+        }
         if (s.contains("unsupported url") || s.contains("unsupported site")) {
             return "Unsupported site. Open page."
         }

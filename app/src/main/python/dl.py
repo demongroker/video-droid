@@ -432,7 +432,8 @@ def _classify_twitter_error(err, had_cookies):
 
 
 def download(url, quality, outdir, filename="source", cookiefile=None,
-             export_enabled=False, progress=None):
+             export_enabled=False, progress=None, referer=None,
+             user_agent=None, page_title=None, force_generic=False):
     if export_enabled:
         # Export ON: H.264-REQUIRED, no any-codec fallback. The phone's ffmpeg
         # build cannot decode HEVC at all (rc=69 invalid data even in software),
@@ -485,6 +486,20 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
     }
     if cookie_ok:
         opts["cookiefile"] = cookiefile
+
+    _headers = {}
+    if referer:
+        _headers["Referer"] = referer
+        _parts = referer.split("/", 3)
+        if len(_parts) >= 3:
+            _headers["Origin"] = _parts[0] + "//" + _parts[2]
+    if user_agent:
+        _headers["User-Agent"] = user_agent
+    if _headers:
+        opts["http_headers"] = _headers
+    if force_generic:
+        # No extractor for this site: let yt-dlp's generic extractor try the page.
+        opts["force_generic_extractor"] = True
 
     dest_base = os.path.join(outdir, filename)
     info = None
@@ -578,7 +593,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
                 "duration": (info or {}).get("duration") or 0,
                 "width": (info or {}).get("width") or 0,
                 "height": (info or {}).get("height") or 0,
-                "title": (info or {}).get("title") or "",
+                "title": (info or {}).get("title") or (page_title or ""),
             })
     if twid:
         raise NoVideoInTweet("No video in this tweet")
