@@ -2,6 +2,36 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 1.9.2 (versionCode 60)
+
+### Resumable downloads
+
+- **Resume, don't restart.** Each source now gets its own partial directory
+  keyed by a SHA-1 of the URL, and nothing wipes it at job start. Previously a
+  single shared work dir was cleared on every run, throwing away the `.part`
+  file and forcing a restart from zero. Partials are kept on network errors and
+  removed only when the user cancels that item.
+- **Never gives up on a drop.** `retries` and `fragment_retries` are infinite,
+  `socket_timeout` went 8s → 30s, and a retry loop backs off 2/4/8/16/32/60s.
+  While waiting, the status reads *"Waiting for connection… (resumes
+  automatically)"* instead of failing.
+- **Network watcher.** The service registers a default-network callback: losing
+  the network shows the waiting message, and the radio coming back immediately
+  publishes *"Connection restored — resuming…"* rather than waiting out a
+  socket timeout.
+- **Stays alive.** A partial wakelock and a high-performance Wi-Fi lock are held
+  while a job runs (released on finish/cancel), on top of the existing
+  `dataSync` foreground service and its progress notification. The service
+  already returns `START_STICKY`, so a swipe from recents does not end the job.
+- **Per-item state is persisted.** The queue entry now carries `progress` and
+  `partialPath` alongside URL/quality, so a restart knows how far it got and
+  where the partial lives. Unfinished items are re-enqueued on app start and on
+  `BOOT_COMPLETED` (unchanged path, now with state to resume from).
+- **Battery**: new *Battery* control in the More section shows whether Android
+  may kill the app and opens the exemption dialog / per-app battery screen.
+  The one-time prompt is unchanged.
+- **Cancel Current** still stops and cleans up that item only.
+
 ## 1.9.1 (versionCode 59)
 
 ### Fixed

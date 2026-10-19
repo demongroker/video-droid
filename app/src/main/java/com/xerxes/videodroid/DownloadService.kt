@@ -8,8 +8,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class DownloadService : Service() {
@@ -29,13 +33,51 @@ class DownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Swiped from recents must not kill an in-flight transfer: the service
+        // keeps the queue draining and WorkManager re-arms it if the process dies.
+        super.onTaskRemoved(rootIntent)
+    }
+
+    /** Held while a job runs so the CPU and the radio never doze mid-transfer. */
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private fun acquireLocks() {
+        if (wakeLock?.isHeld != true) {
+            val pm = getSystemService(POWER_SERVICE) as? PowerManager
+            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VideoDroid:download")?.apply {
+                setReferenceCounted(false)
+                acquire(4 * 60 * 60 * 1000L)
+            }
+        }
+        if (wifiLock?.isHeld != true) {
+            val wm = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
+            wifiLock = wm?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "VideoDroid:wifi")?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+    }
+
+    private fun releaseLocks() {
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
+        wakeLock = null
+        wifiLock = null
+    }
+
     override fun onDestroy() {
         isRunning = false
+        stopWatchingNetwork()
+        releaseLocks()
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         isRunning = true
+        acquireLocks()
+        watchNetwork()
         when (intent?.action) {
             ACTION_CANCEL -> {
                 FormatWorker.requestCancel()
@@ -150,8 +192,56 @@ class DownloadService : Service() {
         val detailed = withJobDetail(jobLine)
         val waiting = DownloadQueue.waiting(applicationContext)
         val ui = if (waiting > 0) "Queued ($waiting)\n$detailed" else detailed
+        persistProgress(jobLine)
         updateNotification(composeNotif(detailed, waiting))
         listener?.onStatus(ui)
+    }
+
+    private var lastPersistedPct = -1
+
+    /** Remember how far this item got, so a restart can resume and show it. */
+    private fun persistProgress(jobLine: String) {
+        val pct = JOB_PCT.find(jobLine)?.groupValues?.get(1)?.toIntOrNull() ?: return
+        if (pct == lastPersistedPct) return
+        lastPersistedPct = pct
+        val head = DownloadQueue.peek(applicationContext) ?: return
+        val dir = FormatWorker.partialDirFor(applicationContext, head.url, head.localPath)
+        DownloadQueue.setProgress(applicationContext, pct, dir.absolutePath)
+    }
+
+    // ---- connectivity ----
+
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+
+    @Volatile
+    private var networkLost = false
+
+    /** React to the radio coming back instead of waiting for a socket timeout. */
+    private fun watchNetwork() {
+        if (netCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                networkLost = true
+                if (isRunning) publish("Waiting for connection… (resumes automatically)")
+            }
+
+            override fun onAvailable(network: Network) {
+                if (!networkLost) return
+                networkLost = false
+                if (isRunning) publish("Connection restored — resuming…")
+            }
+        }
+        runCatching { cm.registerDefaultNetworkCallback(cb) }
+        netCallback = cb
+    }
+
+    private fun stopWatchingNetwork() {
+        val cb = netCallback ?: return
+        runCatching {
+            (getSystemService(ConnectivityManager::class.java))?.unregisterNetworkCallback(cb)
+        }
+        netCallback = null
     }
 
     private fun composeNotif(jobLine: String, waiting: Int = DownloadQueue.waiting(applicationContext)): String {
@@ -212,6 +302,9 @@ class DownloadService : Service() {
     }
 
     companion object {
+        private val JOB_PCT =
+            Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""")
+
         /** True while a job is in flight; read by QueueResumeWorker. */
         @Volatile
         var isRunning: Boolean = false

@@ -73,12 +73,40 @@ object FormatWorker {
     /** Active FFmpeg session only — never FFmpegKit.cancel() with no id. */
     private val activeFfmpegSessionId = AtomicLong(-1L)
 
+    @Volatile
+    private var activeWorkDir: File? = null
+
+    /** Directory holding this source's partial download; kept between attempts. */
+    fun partialDirFor(context: Context, url: String, localPath: String?): File {
+        val key = when {
+            url.isNotBlank() -> java.security.MessageDigest.getInstance("SHA-1")
+                .digest(url.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            !localPath.isNullOrBlank() -> "local"
+            else -> "unknown"
+        }
+        return File(File(context.cacheDir, "vaf"), key)
+    }
+
     fun requestCancel() {
         cancelRequested.set(true)
         try {
             Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
         } catch (_: Throwable) { }
         cancelActiveFfmpegOnly()
+        // This item's partials are dead weight once cancelled — remove them,
+        // but give the worker a moment to unwind first. Only this item's dir.
+        val dir = activeWorkDir
+        if (dir != null) {
+            Thread {
+                try {
+                    Thread.sleep(2500)
+                } catch (_: InterruptedException) {
+                }
+                dir.deleteRecursively()
+                activeWorkDir = null
+            }.start()
+        }
     }
 
     private fun cancelActiveFfmpegOnly() {
@@ -115,9 +143,13 @@ object FormatWorker {
             Python.getInstance().getModule("dl").callAttr("set_cancelled", false)
         } catch (_: Throwable) { }
 
-        val work = File(context.cacheDir, "vaf")
+        // One directory per source. A shared dir used to be wiped on every
+        // job start, which threw away the .part file and forced a restart from
+        // zero. Partials now survive; they are only dropped when the user
+        // cancels that specific item.
+        val work = partialDirFor(context, url, localPath)
         work.mkdirs()
-        work.listFiles()?.forEach { it.delete() }
+        activeWorkDir = work
 
         return try {
             if (cancelRequested.get()) return FormatResult(false, "Cancelled")
