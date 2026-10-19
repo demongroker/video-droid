@@ -213,11 +213,7 @@ jobs:
           script: |
             set -e
             adb wait-for-device
-            # Wait for a real boot, not just a connected device.
-            for i in $(seq 1 120); do
-              [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ] && break
-              sleep 2
-            done
+            sleep 5
             adb shell settings put secure anr_show_background 0 || true
             adb shell settings put global window_animation_scale 0 || true
             adb shell settings put global transition_animation_scale 0 || true
@@ -226,8 +222,8 @@ jobs:
             mkdir -p screenshots
             adb shell am start -W -n com.xerxes.videodroid/.MainActivity
             sleep 6
-            W=$(adb shell wm size | sed 's/.*: //' | cut -dx -f1 | tr -d '\r')
-            H=$(adb shell wm size | sed 's/.*: //' | cut -dx -f2 | tr -d '\r')
+            W=$(adb shell wm size | sed 's/.*: //' | cut -dx -f1)
+            H=$(adb shell wm size | sed 's/.*: //' | cut -dx -f2)
             Y=$((H - H/14))
             echo "screen ${W}x${H}, tapping bottom bar at y=$Y"
             adb exec-out screencap -p > screenshots/01-download.png
