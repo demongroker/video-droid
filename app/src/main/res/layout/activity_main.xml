@@ -642,7 +642,7 @@
         </LinearLayout>
     </ScrollView>
 
-    <include
-        android:id="@+id/bottomNavHost"
-        layout="@layout/bottom_nav" />
+    <!-- No android:id here: an include id would override the included root's
+         id (bottomNav) and findViewById(R.id.bottomNav) would return null. -->
+    <include layout="@layout/bottom_nav" />
 </LinearLayout>
