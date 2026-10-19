@@ -6,147 +6,154 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.StatFs
 import android.provider.MediaStore
-import android.text.format.DateUtils
-import android.text.format.Formatter
+import android.util.Size
+import android.view.LayoutInflater
 import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.ListView
+import android.view.ViewGroup
+import android.widget.BaseAdapter
+import android.widget.GridView
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.xerxes.videodroid.ui.Insets
 import java.io.File
+import java.util.Locale
 
-/**
- * Library: everything VideoDroid has produced so far.
- *
- * FormatWorker publishes finished files through MediaStore into
- * `Download/VideoDroid`, so this screen reads them back from the same place —
- * the app keeps no second index that could drift.
- */
+/** Finished downloads, as a thumbnail grid with a storage bar (v2). */
 class LibraryActivity : AppCompatActivity() {
 
-    private data class Item(val uri: Uri, val name: String, val size: Long, val added: Long) {
-        fun label(now: Long, ctx: android.content.Context): String {
-            val when_ = DateUtils.getRelativeTimeSpanString(added * 1000L, now, DateUtils.MINUTE_IN_MILLIS)
-            val size_ = Formatter.formatShortFileSize(ctx, size)
-            return "$name\n$size_ · $when_"
-        }
-    }
+    private data class Item(val uri: Uri, val name: String, val size: Long)
 
-    private lateinit var list: ListView
+    private lateinit var grid: GridView
     private lateinit var empty: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_library)
         Insets.applyTo(findViewById(R.id.libraryRoot))
+        NavHelper.sync(this, R.id.tab_library)
 
-        list = findViewById(R.id.libraryList)
+        grid = findViewById(R.id.libraryGrid)
         empty = findViewById(R.id.libraryEmpty)
-        NavHelper.wire(this, R.id.tab_library)
-        findViewById<View>(R.id.libraryBack).setOnClickListener { finish() }
 
         val items = loadItems()
-        if (items.isEmpty()) {
-            empty.visibility = View.VISIBLE
-            list.visibility = View.GONE
-            return
-        }
-        empty.visibility = View.GONE
-        val now = System.currentTimeMillis()
-        val labels = items.map { it.label(now, this) }
-        list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
-        list.setOnItemClickListener { _, _, position, _ -> open(items[position]) }
-    }
+        grid.adapter = GridAdapter(items)
+        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
 
-    private fun open(item: Item) {
-        try {
-            startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(item.uri, "video/mp4")
+        grid.setOnItemClickListener { _, _, position, _ ->
+            val item = items.getOrNull(position) ?: return@setOnItemClickListener
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(item.uri, "video/*")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                },
-            )
-        } catch (_: Throwable) {
-            // Nothing can play it — fall back to the system share sheet.
-            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "video/mp4"
-                putExtra(Intent.EXTRA_STREAM, item.uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }, "Open with"))
+                })
+            }.onFailure { share(item.uri) }
         }
-    }
-
-    private fun loadItems(): List<Item> =
-        if (Build.VERSION.SDK_INT >= 29) loadFromMediaStore() else loadFromDisk()
-
-    private fun loadFromMediaStore(): List<Item> {
-        val projection = arrayOf(
-            MediaStore.Downloads._ID,
-            MediaStore.Downloads.DISPLAY_NAME,
-            MediaStore.Downloads.SIZE,
-            MediaStore.Downloads.DATE_ADDED,
-        )
-        val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-        val selectionArgs = arrayOf("%${OUT_DIR}%")
-        val out = ArrayList<Item>()
-        try {
-            contentResolver.query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                "${MediaStore.Downloads.DATE_ADDED} DESC",
-            )?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.Downloads._ID)
-                val nameCol = c.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
-                val sizeCol = c.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
-                val dateCol = c.getColumnIndexOrThrow(MediaStore.Downloads.DATE_ADDED)
-                while (c.moveToNext()) {
-                    val id = c.getLong(idCol)
-                    out.add(
-                        Item(
-                            uri = ContentUris.withAppendedId(
-                                MediaStore.Downloads.EXTERNAL_CONTENT_URI, id,
-                            ),
-                            name = c.getString(nameCol) ?: "video.mp4",
-                            size = c.getLong(sizeCol),
-                            added = c.getLong(dateCol),
-                        ),
-                    )
-                }
-            }
-        } catch (_: Throwable) {
-            // Fall through to an empty list rather than crashing the screen.
+        grid.setOnItemLongClickListener { _, _, position, _ ->
+            items.getOrNull(position)?.let { share(it.uri) }
+            true
         }
-        return out
-    }
 
-    /** Pre-Q: no RELATIVE_PATH column, so read the folder directly. */
-    @Suppress("DEPRECATION")
-    private fun loadFromDisk(): List<Item> {
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), OUT_DIR)
-        if (!dir.isDirectory) return emptyList()
-        return (dir.listFiles() ?: emptyArray())
-            .filter { it.isFile && it.length() > 0 }
-            .sortedByDescending { it.lastModified() }
-            .map {
-                Item(
-                    uri = Uri.fromFile(it),
-                    name = it.name,
-                    size = it.length(),
-                    added = it.lastModified() / 1000L,
-                )
-            }
-    }
-
-    companion object {
-        private const val OUT_DIR = "VideoDroid"
+        updateStorage()
     }
 
     override fun onResume() {
         super.onResume()
         NavHelper.sync(this, R.id.tab_library)
+    }
+
+    private fun share(uri: Uri) {
+        runCatching {
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "video/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, "Share"))
+        }
+    }
+
+    private fun updateStorage() {
+        val stat = runCatching { StatFs(Environment.getExternalStorageDirectory().absolutePath) }
+            .getOrNull() ?: return
+        val free = stat.availableBytes
+        val total = stat.totalBytes
+        if (total <= 0) return
+        val usedPct = (((total - free).toDouble() / total) * 100).toInt().coerceIn(0, 100)
+        findViewById<TextView>(R.id.storageText)?.text = String.format(
+            Locale.US,
+            "%s free of %s",
+            human(free),
+            human(total),
+        )
+        findViewById<android.widget.ProgressBar>(R.id.storageBar)?.progress = usedPct
+    }
+
+    private fun human(bytes: Long): String {
+        val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+        return if (gb >= 1) String.format(Locale.US, "%.1f GB", gb)
+        else String.format(Locale.US, "%.0f MB", bytes / (1024.0 * 1024.0))
+    }
+
+    private fun loadItems(): List<Item> {
+        val out = ArrayList<Item>()
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Files.getContentUri("external")
+        }
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+        )
+        val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+        } else {
+            "${MediaStore.MediaColumns.DATA} LIKE ?"
+        }
+        val args = arrayOf("%VideoDroid%")
+
+        runCatching {
+            contentResolver.query(collection, projection, selection, args, "${MediaStore.MediaColumns._ID} DESC")
+                ?.use { c ->
+                    val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val nameCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                    while (c.moveToNext()) {
+                        val uri = ContentUris.withAppendedId(collection, c.getLong(idCol))
+                        out.add(Item(uri, c.getString(nameCol) ?: "video", c.getLong(sizeCol)))
+                    }
+                }
+        }
+        return out
+    }
+
+    private inner class GridAdapter(private val items: List<Item>) : BaseAdapter() {
+        override fun getCount() = items.size
+        override fun getItem(position: Int): Any = items[position]
+        override fun getItemId(position: Int) = position.toLong()
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val view = convertView ?: LayoutInflater.from(this@LibraryActivity)
+                .inflate(R.layout.item_library, parent, false)
+            val item = items[position]
+            val thumb = view.findViewById<ImageView>(R.id.libThumb)
+            val label = view.findViewById<TextView>(R.id.libName)
+
+            label.text = item.name
+            thumb.setImageDrawable(null)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                runCatching {
+                    thumb.setImageBitmap(
+                        contentResolver.loadThumbnail(item.uri, Size(256, 256), null),
+                    )
+                }.onFailure { thumb.setImageResource(R.drawable.ic_library) }
+            } else {
+                thumb.setImageResource(R.drawable.ic_library)
+            }
+            return view
+        }
     }
 }
