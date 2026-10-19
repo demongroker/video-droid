@@ -39,6 +39,13 @@ android {
             }
         }
     }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
+
     buildTypes {
         release {
             // Shrink the ~61 MB APK: R8 tree-shaking + resource shrinking.
@@ -130,6 +137,9 @@ dependencies {
     def work_version = "2.10.0"
     implementation "androidx.work:work-runtime-ktx:$work_version"
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.13'
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'androidx.test.ext:junit:1.2.1'
 
     // Room Database for DownloadQueue
     def room_version = "2.6.1"

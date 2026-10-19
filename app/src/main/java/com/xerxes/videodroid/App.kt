@@ -1,5 +1,6 @@
 package com.xerxes.videodroid
 
+import android.content.Intent
 import android.os.Bundle
 import com.chaquo.python.android.PyApplication
 
@@ -11,8 +12,18 @@ import com.chaquo.python.android.PyApplication
 class App : PyApplication() {
     override fun onCreate() {
         super.onCreate()
-        // Material You: on Android 12+ every activity picks up the wallpaper
-        // palette. Below 12 this is a no-op and the indigo #3949AB theme
-        // colours apply as before.
+
+        // Catch anything that kills the process, so the next launch can show
+        // the stack trace instead of just "keeps stopping".
+        CrashHandler.install(this)
+
+        if (CrashHandler.hasCrash(this)) {
+            runCatching {
+                startActivity(
+                    Intent(this, CrashActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                )
+            }
+        }
     }
 }

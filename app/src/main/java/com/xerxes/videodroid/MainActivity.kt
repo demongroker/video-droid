@@ -235,7 +235,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         aspectRatio.onItemSelectedListener = persistListener
-        wireV2Controls()
+        runCatching { wireV2Controls() }
 
         findViewById<Button>(R.id.recommendedButton).setOnClickListener {
             collapsePresets()
@@ -336,7 +336,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     override fun onResume() {
-        autoFillFromClipboard()
+        // Reading the clipboard before the window has focus is denied on
+        // Android 10+ and throws on some HyperOS builds. Defer until focused.
+        window.decorView.post { if (hasWindowFocus()) runCatching { autoFillFromClipboard() } }
         super.onResume()
         NavHelper.sync(this, R.id.tab_download)
         refreshBatteryButton()
@@ -635,16 +637,20 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         if (group.checkedButtonId != target) group.check(target)
     }
 
-    private fun clipboardUrl(): String? {
-        val cm = getSystemService(ClipboardManager::class.java) ?: return null
-        val text = cm.primaryClip
+    private fun clipboardUrl(): String? = try {
+        val cm = getSystemService(ClipboardManager::class.java)
+        val text = cm?.primaryClip
             ?.takeIf { it.itemCount > 0 }
             ?.getItemAt(0)
             ?.coerceToText(this)
             ?.toString()
             ?.trim()
             .orEmpty()
-        return text.takeIf { it.startsWith("http") }
+        text.takeIf { it.startsWith("http") }
+    } catch (t: Throwable) {
+        // Android 10+ hides the clipboard without focus and some OEM builds
+        // throw instead of returning null. Never fatal.
+        null
     }
 
     private fun wireV2Controls() {
@@ -675,9 +681,13 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
 
     /** Offer a copied link as soon as the screen becomes visible again. */
     private fun autoFillFromClipboard() {
-        if (!::urlInput.isInitialized) return
-        if (urlInput.text.isNotBlank()) return
-        clipboardUrl()?.let { urlInput.setText(it) }
+        try {
+            if (!::urlInput.isInitialized) return
+            if (urlInput.text.isNotBlank()) return
+            clipboardUrl()?.let { urlInput.setText(it) }
+        } catch (t: Throwable) {
+            // never block startup on a clipboard read
+        }
     }
 
     private fun applySocialPreset(name: String, exportOn: Boolean, quality: String, mode: String, ratio: String) {
