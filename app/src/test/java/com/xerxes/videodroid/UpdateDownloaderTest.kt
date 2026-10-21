@@ -1,6 +1,5 @@
 package com.xerxes.videodroid
 
-import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -8,66 +7,103 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.BufferedReader
 import java.io.File
-import java.net.InetSocketAddress
+import java.io.InputStreamReader
+import java.net.ServerSocket
+import java.net.Socket
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
+/**
+ * Local HTTP stub (plain sockets — the Android unit-test classpath has no
+ * com.sun.net.httpserver) that behaves like a Range-capable CDN.
+ */
 class UpdateDownloaderTest {
 
-    private lateinit var server: HttpServer
+    private lateinit var server: ServerSocket
     private val payload = ByteArray(256 * 1024) { (it % 251).toByte() }
-    private var etag = "\"v1\""
-    private val requests = mutableListOf<Pair<String, String?>>()  // path to Range header
+    private val etag = "\"v1\""
+    private val requests = mutableListOf<Pair<String, String?>>()
     private var ignoreRange = false
-    private var expireFirstUrl = false
     private val hits = AtomicInteger(0)
+    @Volatile private var running = true
 
     @Before fun setUp() {
-        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/apk") { ex ->
-            val range = ex.requestHeaders.getFirst("Range")
-            val ifRange = ex.requestHeaders.getFirst("If-Range")
-            requests += ex.requestURI.path to range
-            if (expireFirstUrl && ex.requestURI.path == "/apk-expired") {
-                ex.sendResponseHeaders(404, -1); ex.close(); return@createContext
+        server = ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        thread(isDaemon = true) {
+            while (running) {
+                val s = try { server.accept() } catch (_: Throwable) { break }
+                thread(isDaemon = true) { serve(s) }
+            }
+        }
+    }
+
+    private fun serve(socket: Socket) {
+        socket.use { s ->
+            val reader = BufferedReader(InputStreamReader(s.getInputStream()))
+            val requestLine = reader.readLine() ?: return
+            val path = requestLine.split(" ").getOrNull(1) ?: "/"
+            var range: String? = null
+            var ifRange: String? = null
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isEmpty()) break
+                val k = line.substringBefore(":").trim()
+                val v = line.substringAfter(":", "").trim()
+                if (k.equals("Range", true)) range = v
+                if (k.equals("If-Range", true)) ifRange = v
+            }
+            requests += path to range
+
+            if (path == "/expired") {
+                hits.incrementAndGet()
+                write(s, 404, emptyMap(), ByteArray(0))
+                return
             }
             val start = if (!ignoreRange && range != null && ifRange == etag) {
                 range.removePrefix("bytes=").removeSuffix("-").toLong().toInt()
             } else 0
-            val code = if (start > 0) 206 else 200
             val body = payload.copyOfRange(start, payload.size)
+            val headers = mutableMapOf("ETag" to etag)
             if (start > 0) {
-                ex.responseHeaders.add("Content-Range", "bytes $start-${payload.size - 1}/${payload.size}")
+                headers["Content-Range"] = "bytes $start-${payload.size - 1}/${payload.size}"
             }
-            ex.responseHeaders.add("ETag", etag)
-            ex.sendResponseHeaders(code, body.size.toLong())
-            ex.responseBody.use { it.write(body) }
+            write(s, if (start > 0) 206 else 200, headers, body)
         }
-        server.createContext("/expired") { ex ->
-            hits.incrementAndGet()
-            ex.sendResponseHeaders(404, -1); ex.close()
-        }
-        server.start()
     }
 
-    @After fun tearDown() { server.stop(0) }
+    private fun write(s: Socket, code: Int, headers: Map<String, String>, body: ByteArray) {
+        val out = s.getOutputStream()
+        val sb = StringBuilder("HTTP/1.1 $code ${if (code == 206) "Partial Content" else "OK"}\r\n")
+        headers.forEach { (k, v) -> sb.append("$k: $v\r\n") }
+        sb.append("Content-Length: ${body.size}\r\n")
+        sb.append("Connection: close\r\n\r\n")
+        out.write(sb.toString().toByteArray())
+        out.write(body)
+        out.flush()
+    }
 
-    private fun base() = "http://127.0.0.1:${server.address.port}"
+    @After fun tearDown() {
+        running = false
+        try { server.close() } catch (_: Throwable) {}
+    }
+
+    private fun base() = "http://127.0.0.1:${server.localPort}"
     private fun tmpDest(): File = File.createTempFile("vd-test", ".apk").also { it.delete() }
 
     @Test fun downloadsFromScratch() {
         val dest = tmpDest()
         val r = UpdateDownloader().download("${base()}/apk", dest)
-        assertNotNull(r.error, r.file)
+        assertNull(r.error)
         assertEquals(payload.size.toLong(), dest.length())
-        assertTrue(File(dest.absolutePath + ".part").exists().not())
+        assertTrue(!File(dest.absolutePath + ".part").exists())
     }
 
     @Test fun resumesWithRangeAndIfRange() {
         val dest = tmpDest()
-        val part = File(dest.absolutePath + ".part")
         val half = payload.size / 2
-        part.writeBytes(payload.copyOfRange(0, half))
+        File(dest.absolutePath + ".part").writeBytes(payload.copyOfRange(0, half))
         File(dest.absolutePath + ".etag").writeText(etag)
 
         val r = UpdateDownloader().download("${base()}/apk", dest, etag = etag)
@@ -76,8 +112,7 @@ class UpdateDownloaderTest {
         assertTrue(r.resumed)
         assertEquals(payload.size.toLong(), dest.length())
         assertTrue(payload.contentEquals(dest.readBytes()))
-        val last = requests.last()
-        assertEquals("bytes=$half-", last.second)
+        assertEquals("bytes=$half-", requests.last().second)
     }
 
     @Test fun restartsWhenServerIgnoresRange() {
@@ -105,7 +140,7 @@ class UpdateDownloaderTest {
         assertNull(r.error)
         assertEquals(payload.size.toLong(), dest.length())
         assertTrue(payload.contentEquals(dest.readBytes()))
-        assertTrue("expired endpoint must be hit once", hits.get() >= 1)
+        assertTrue("expired endpoint must be hit", hits.get() >= 1)
     }
 
     @Test fun parsesContentRangeTotal() {
