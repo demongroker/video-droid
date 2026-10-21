@@ -157,7 +157,11 @@ class DownloadService : Service() {
             } catch (t: Throwable) {
                 FormatResult(false, t.message ?: "Failed")
             }
-            DownloadQueue.finish(applicationContext, job.id)
+            if (res.ok) {
+                DownloadQueue.finish(applicationContext, job.id)
+            } else {
+                DownloadQueue.markFailed(applicationContext, job.id, res.message)
+            }
             liveStatus.remove(job.id)
             listener?.onFinished(res)
         } catch (_: Throwable) {
@@ -375,6 +379,12 @@ class DownloadService : Service() {
         fun cancel(ctx: Context) {
             FormatWorker.requestCancel()
             ctx.startService(Intent(ctx, DownloadService::class.java).setAction(ACTION_CANCEL))
+        }
+
+        /** Kick the pump without enqueuing anything (used by queue retry). */
+        fun resume(ctx: Context) {
+            val i = Intent(ctx, DownloadService::class.java).setAction(ACTION_START)
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
 
         fun lastUriKey() = "last_result_uri"
