@@ -1,7 +1,7 @@
 package com.xerxes.videodroid
 
 import android.app.Activity
-import android.app.ProgressDialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -132,110 +132,27 @@ object UpdateChecker {
     }
 
     private fun startDownload(activity: Activity, version: String, apkUrl: String) {
-        val progress = ProgressDialog(activity).apply {
-            setTitle("Downloading $version")
-            setMessage("Starting…")
-            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
-            max = 100
-            setCancelable(false)
-            show()
-        }
-        val ref = WeakReference(activity)
-        Thread {
-            val file = downloadApk(activity, apkUrl) { pct, msg ->
-                val a = ref.get() ?: return@downloadApk
-                a.runOnUiThread {
-                    if (!progress.isShowing) return@runOnUiThread
-                    if (pct in 0..100) progress.progress = pct
-                    progress.setMessage(msg)
-                }
-            }
-            val act = ref.get()
-            act?.runOnUiThread {
-                try { progress.dismiss() } catch (_: Throwable) { }
-                if (act.isFinishing || act.isDestroyed) return@runOnUiThread
-                if (file == null) {
-                    Toast.makeText(act, "Update download failed", Toast.LENGTH_LONG).show()
-                    return@runOnUiThread
-                }
-                if (!apkSigningMatchesInstalled(act, file)) {
-                    file.delete()
-                    Toast.makeText(
-                        act,
-                        "Update refused: signing certificate does not match the installed app",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@runOnUiThread
-                }
-                promptInstall(act, file)
-            }
-        }.start()
-    }
-
-    private fun downloadApk(
-        activity: Activity,
-        apkUrl: String,
-        onProgress: (Int, String) -> Unit,
-    ): File? {
-        return try {
-            val dest = File(activity.cacheDir, "VideoDroid-update.apk")
-            if (dest.exists()) dest.delete()
-            val conn = URL(apkUrl).openConnection() as HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.connectTimeout = 15000
-            conn.readTimeout = 60000
-            conn.setRequestProperty("User-Agent", "VideoDroid")
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            if (conn.responseCode !in 200..299) {
-                Log.w(TAG, "APK download HTTP ${conn.responseCode}")
-                conn.disconnect()
-                return null
-            }
-            val total = conn.contentLengthLong
-            conn.inputStream.use { input ->
-                dest.outputStream().use { output ->
-                    val buf = ByteArray(64 * 1024)
-                    var read = 0L
-                    var lastPct = -1
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        output.write(buf, 0, n)
-                        read += n
-                        val pct = if (total > 0) ((read * 100) / total).toInt().coerceIn(0, 100) else -1
-                        if (pct != lastPct) {
-                            lastPct = pct
-                            val msg = if (pct >= 0) "$pct%" else "${read / 1024} KB"
-                            onProgress(if (pct >= 0) pct else 0, msg)
-                        }
-                    }
-                }
-            }
-            conn.disconnect()
-            if (!dest.exists() || dest.length() < 1024) {
-                dest.delete()
-                return null
-            }
-            dest
-        } catch (e: Throwable) {
-            Log.w(TAG, "APK download failed", e)
-            null
-        }
+        UpdateService.start(activity.applicationContext, version, apkUrl)
+        Toast.makeText(
+            activity,
+            "Downloading $version in the background — progress is in the status bar",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     /**
      * Fail closed: downloaded APK must share a current signing cert with the
      * installed package (PackageManager signatures / SigningInfo). No skip.
      */
-    private fun apkSigningMatchesInstalled(activity: Activity, apk: File): Boolean {
+    fun verifyApkSignature(context: Context, apk: File): Boolean {
         return try {
-            val pm = activity.packageManager
+            val pm = context.packageManager
             val archiveInfo = archivePackageInfo(pm, apk) ?: return false
-            if (archiveInfo.packageName != activity.packageName) {
-                Log.w(TAG, "APK package ${archiveInfo.packageName} != ${activity.packageName}")
+            if (archiveInfo.packageName != context.packageName) {
+                Log.w(TAG, "APK package ${archiveInfo.packageName} != ${context.packageName}")
                 return false
             }
-            val installed = currentSignerBytes(installedPackageInfo(pm, activity.packageName))
+            val installed = currentSignerBytes(installedPackageInfo(pm, context.packageName))
             val archive = currentSignerBytes(archiveInfo)
             if (installed.isEmpty() || archive.isEmpty()) {
                 Log.w(TAG, "Signing certs missing installed=${installed.size} apk=${archive.size}")

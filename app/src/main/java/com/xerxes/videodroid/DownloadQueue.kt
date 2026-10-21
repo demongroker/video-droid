@@ -16,6 +16,10 @@ data class QueuedJob(
     val partialPath: String = "",
     /** Stable id so parallel workers and the UI can address one item. */
     val id: String = "",
+    /** True when the last attempt failed; such rows are not auto-retried. */
+    val failed: Boolean = false,
+    /** Why the last attempt failed (shown on the row). */
+    val failReason: String = "",
 ) {
     val displayName: String
         get() = url.ifBlank { localPath.substringAfterLast('/') }
@@ -61,14 +65,37 @@ object DownloadQueue {
     }
 
     fun peek(ctx: Context): QueuedJob? = synchronized(lock) {
-        loadLocked(ctx).firstOrNull { it.id !in claimed }
+        loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed }
     }
 
     /** Next item not already in flight, claimed for the calling worker. */
     fun claimNext(ctx: Context): QueuedJob? = synchronized(lock) {
-        val next = loadLocked(ctx).firstOrNull { it.id !in claimed } ?: return@synchronized null
+        val next = loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed }
+            ?: return@synchronized null
         claimed.add(next.id)
         next
+    }
+
+    /** Keep the item visible as failed instead of silently dropping it. */
+    fun markFailed(ctx: Context, id: String, reason: String) = synchronized(lock) {
+        claimed.remove(id)
+        val jobs = loadLocked(ctx)
+        val idx = jobs.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            jobs[idx] = jobs[idx].copy(failed = true, failReason = reason.take(200))
+            saveLocked(ctx, jobs)
+        }
+    }
+
+    /** Clear the failed flag so the pump picks the item up again. */
+    fun retry(ctx: Context, id: String): Boolean = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        val idx = jobs.indexOfFirst { it.id == id }
+        if (idx < 0) return@synchronized false
+        jobs[idx] = jobs[idx].copy(failed = false, failReason = "", progress = 0, partialPath = "")
+        saveLocked(ctx, jobs)
+        claimed.remove(id)
+        true
     }
 
     /** Release the claim and drop the item (finished, failed or cancelled). */
@@ -103,7 +130,7 @@ object DownloadQueue {
 
     /** Items not yet claimed — what the UI shows as "queued". */
     fun waiting(ctx: Context): Int = synchronized(lock) {
-        loadLocked(ctx).count { it.id !in claimed }
+        loadLocked(ctx).count { it.id !in claimed && !it.failed }
     }
 
     fun setProgress(ctx: Context, id: String, progress: Int, partialPath: String) =
@@ -155,6 +182,8 @@ object DownloadQueue {
                         partialPath = o.optString("partial", ""),
                         // Queue files written before 1.9.4 have no id.
                         id = o.optString("id", "").ifEmpty { newId() },
+                        failed = o.optBoolean("failed", false),
+                        failReason = o.optString("failReason", ""),
                     ),
                 )
             }
@@ -200,6 +229,8 @@ object DownloadQueue {
                     put("local", j.localPath)
                     put("progress", j.progress)
                     put("partial", j.partialPath)
+                    put("failed", j.failed)
+                    put("failReason", j.failReason)
                 },
             )
         }
