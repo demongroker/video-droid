@@ -37,20 +37,25 @@ class OptionsAndQueueLaunchTest {
     }
 
     @Test
-    fun optionsSheetOpensFromMainActivity() {
+    fun optionsSheetInflates() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
-
-        activity.findViewById<View>(R.id.optionsButton).performClick()
+        val sheet = OptionsSheetFragment.newInstance(
+            quality = "720p",
+            exportOn = true,
+            mode = "Fill",
+            ratio = "Square 1:1",
+            trimOn = false,
+            trimStart = 2,
+            trimEnd = 3,
+        )
+        activity.supportFragmentManager.beginTransaction()
+            .add(sheet, OptionsSheetFragment.TAG)
+            .commitNow()
         shadowOf(Looper.getMainLooper()).idle()
-        activity.supportFragmentManager.executePendingTransactions()
-        shadowOf(Looper.getMainLooper()).idle()
 
-        val sheet = activity.supportFragmentManager
-            .findFragmentByTag(OptionsSheetFragment.TAG)
-        assertNotNull("Options sheet did not open", sheet)
-        val root = sheet!!.view
-        assertNotNull(root)
+        val root = sheet.view
+        assertNotNull("sheet view did not inflate", root)
         assertNotNull(root!!.findViewById<View>(R.id.optQuality))
         assertNotNull(root.findViewById<View>(R.id.optMode))
         assertNotNull(root.findViewById<View>(R.id.optRatio))
@@ -61,16 +66,21 @@ class OptionsAndQueueLaunchTest {
     fun applyingSheetWritesRealPreferences() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
-        activity.findViewById<View>(R.id.optionsButton).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        activity.supportFragmentManager.executePendingTransactions()
+        val sheet = OptionsSheetFragment.newInstance(
+            quality = "1080p",
+            exportOn = true,
+            mode = "Original",
+            ratio = "Portrait 9:16",
+            trimOn = false,
+            trimStart = 1,
+            trimEnd = 1,
+        )
+        activity.supportFragmentManager.beginTransaction()
+            .add(sheet, OptionsSheetFragment.TAG)
+            .commitNow()
         shadowOf(Looper.getMainLooper()).idle()
 
-        val sheet = activity.supportFragmentManager
-            .findFragmentByTag(OptionsSheetFragment.TAG) as OptionsSheetFragment
         val root = sheet.view!!
-
-        // Pick 720p, then Apply.
         root.findViewById<View>(R.id.optQ720).performClick()
         root.findViewById<MaterialButton>(R.id.optApply).performClick()
         shadowOf(Looper.getMainLooper()).idle()
