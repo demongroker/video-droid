@@ -160,7 +160,6 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             applySocialPreset("Facebook", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Landscape 16:9")
         }
         presetsToggle.setOnClickListener { expandPresets() }
-        findViewById<View>(R.id.optionsButton).setOnClickListener { openOptionsSheet() }
         wirePresetCollapse()
 
         moreToggle.setOnClickListener {
@@ -718,9 +717,9 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             }
         }
 
-        // The Options button reveals the advanced controls.
+        // The Options button opens the bottom sheet.
         findViewById<View>(R.id.optionsButton)?.setOnClickListener {
-            if (moreSection.visibility != View.VISIBLE) moreToggle.performClick()
+            openOptionsSheet()
         }
     }
 

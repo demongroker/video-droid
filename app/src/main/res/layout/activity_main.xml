@@ -300,15 +300,6 @@
                 android:textAllCaps="false"
                 android:textColor="@color/vd_text_dim" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/optionsButton"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Options"
-                android:textAllCaps="false"
-                android:textColor="@color/vd_text_dim" />
-
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/presetsExpanded"
                 android:layout_width="match_parent"
