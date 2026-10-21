@@ -43,6 +43,8 @@ class OptionsAndQueueLaunchTest {
 
         activity.findViewById<View>(R.id.optionsButton).performClick()
         shadowOf(Looper.getMainLooper()).idle()
+        activity.supportFragmentManager.executePendingTransactions()
+        shadowOf(Looper.getMainLooper()).idle()
 
         val sheet = activity.supportFragmentManager
             .findFragmentByTag(OptionsSheetFragment.TAG)
@@ -60,6 +62,8 @@ class OptionsAndQueueLaunchTest {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         activity.findViewById<View>(R.id.optionsButton).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        activity.supportFragmentManager.executePendingTransactions()
         shadowOf(Looper.getMainLooper()).idle()
 
         val sheet = activity.supportFragmentManager
