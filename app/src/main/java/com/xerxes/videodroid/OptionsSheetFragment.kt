@@ -100,7 +100,7 @@ class OptionsSheetFragment : BottomSheetDialogFragment() {
             }
             ratioGroup?.addView(chip)
         }
-        selectChip(ratioGroup, RATIOS.indexOf(ratio).coerceAtLeast(0))
+        selectChipAt(ratioGroup, RATIOS.indexOf(ratio).coerceAtLeast(0))
 
         val trimSwitch = view.findViewById<MaterialSwitch>(R.id.optTrim)
         val trimRow = view.findViewById<View>(R.id.optTrimRow)
@@ -121,7 +121,7 @@ class OptionsSheetFragment : BottomSheetDialogFragment() {
         ratioGroup?.visibility = if (mode == "Original") View.GONE else View.VISIBLE
 
         view.findViewById<MaterialButton>(R.id.optReset).setOnClickListener {
-            selectChip(qGroup, QUALITIES.indexOf("1080p"))
+            selectChipAt(qGroup, QUALITIES.indexOf("1080p"))
             view.findViewById<MaterialSwitch>(R.id.optExport).isChecked = true
             selectChip(modeGroup, 0)
             ratioGroup?.visibility = View.GONE
@@ -164,7 +164,7 @@ class OptionsSheetFragment : BottomSheetDialogFragment() {
         group.check(id)
     }
 
-    private fun selectChip(group: ChipGroup?, index: Int) {
+    private fun selectChipAt(group: ChipGroup?, index: Int) {
         if (group == null || index < 0 || index >= group.childCount) return
         val child = group.getChildAt(index)
         group.check(child.id)
