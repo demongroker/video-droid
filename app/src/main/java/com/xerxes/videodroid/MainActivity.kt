@@ -44,7 +44,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.regex.Pattern
 
-class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFragment.Listener {
+class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFragment.Listener,
+    OptionsSheetFragment.Listener {
 
     private lateinit var urlInput: EditText
     private lateinit var dlQuality: Spinner
@@ -159,6 +160,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             applySocialPreset("Facebook", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Landscape 16:9")
         }
         presetsToggle.setOnClickListener { expandPresets() }
+        findViewById<View>(R.id.optionsButton).setOnClickListener { openOptionsSheet() }
         wirePresetCollapse()
 
         moreToggle.setOnClickListener {
@@ -528,6 +530,49 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             localPath = localPath,
             settings = JobSettings(dlQ, exportOn, aspect, trimOn, tStart, tEnd),
         )
+    }
+
+    private fun openOptionsSheet() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        OptionsSheetFragment.newInstance(
+            quality = dlQuality.selectedItem?.toString() ?: "1080p",
+            exportOn = exportSwitch.isChecked,
+            mode = aspectMode.selectedItem?.toString() ?: "Original",
+            ratio = aspectRatio.selectedItem?.toString() ?: "Portrait 9:16",
+            trimOn = trimSwitch.isChecked,
+            trimStart = trimStart.text.toString().toIntOrNull()
+                ?: readTrimPref(prefs, KEY_TRIM_START),
+            trimEnd = trimEnd.text.toString().toIntOrNull()
+                ?: readTrimPref(prefs, KEY_TRIM_END),
+        ).show(supportFragmentManager, OptionsSheetFragment.TAG)
+    }
+
+    /** Values from the sheet are written back into the real widgets, then persisted. */
+    override fun onOptionsApplied(
+        quality: String,
+        exportOn: Boolean,
+        mode: String,
+        ratio: String,
+        trimOn: Boolean,
+        trimStart: Int,
+        trimEnd: Int,
+    ) {
+        suppressPersist = true
+        selectValue(dlQuality, quality, "1080p")
+        exportSwitch.isChecked = exportOn
+        selectValue(aspectMode, mode, "Original")
+        selectValue(aspectRatio, ratio, "Portrait 9:16")
+        trimSwitch.isChecked = trimOn
+        this.trimStart.setText(trimStart.toString())
+        this.trimEnd.setText(trimEnd.toString())
+        suppressPersist = false
+
+        applyExportUi(exportOn)
+        applyAspectModeUi()
+        applyTrimOnOff(trimOn)
+        persistCurrent(custom = true)
+        clearRecommendedNotice()
+        syncQualityPills(dlQuality.selectedItemPosition)
     }
 
     private fun persistCurrent(custom: Boolean) {
