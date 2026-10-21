@@ -2,6 +2,25 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.0.2 (versionCode 66)
+
+### Background, resumable updates
+- Updates download in a foreground service with a status-bar notification
+  instead of a modal dialog, so leaving the app no longer kills the transfer.
+- Resumable: `Range`/`If-Range` with the stored ETag, `206` append vs `200`
+  restart, and expired GitHub asset URLs are re-resolved while keeping the
+  byte offset. Unit-tested against a local Range-capable server.
+- Downloaded APK is still signature-checked before the installer opens.
+
+### Options bottom sheet
+- The Options button now opens a real bottom sheet editing quality, export,
+  aspect mode/ratio and trim. Values are written back into the same widgets
+  and persisted through the existing path.
+
+### Queue actions
+- Queue moved to RecyclerView: swipe left cancels (with confirm), swipe right
+  shares, and failed items stay listed with their reason — tap to retry.
+
 ## 2.0.1 (versionCode 65)
 
 ### Startup crash fixed
