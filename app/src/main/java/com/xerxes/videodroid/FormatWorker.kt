@@ -112,6 +112,20 @@ object FormatWorker {
         }
     }
 
+    /**
+     * Stop the running item but KEEP its partial files and progress, so resuming continues
+     * from where it left off. This is the whole difference from [requestCancel], which
+     * deletes the work directory and loses the resume point.
+     */
+    fun requestPause() {
+        cancelRequested.set(true)
+        try {
+            Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
+        } catch (_: Throwable) { }
+        cancelActiveFfmpegOnly()
+        // Deliberately NOT deleting activeWorkDir — that is what makes this a pause.
+    }
+
     private fun cancelActiveFfmpegOnly() {
         val id = activeFfmpegSessionId.get()
         if (id < 0L) return

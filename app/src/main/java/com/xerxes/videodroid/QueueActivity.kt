@@ -33,6 +33,7 @@ class QueueActivity : AppCompatActivity() {
     private lateinit var list: RecyclerView
     private lateinit var empty: TextView
     private lateinit var clear: View
+    private lateinit var pauseAll: com.google.android.material.button.MaterialButton
     private val handler = Handler(Looper.getMainLooper())
     private var ticker: Runnable? = null
     private var jobs: List<QueuedJob> = emptyList()
@@ -47,6 +48,7 @@ class QueueActivity : AppCompatActivity() {
         list = findViewById(R.id.queueList)
         empty = findViewById(R.id.queueEmpty)
         clear = findViewById(R.id.queueClear)
+        pauseAll = findViewById(R.id.queuePauseAll)
 
         list.layoutManager = LinearLayoutManager(this)
         list.addItemDecoration(
@@ -55,6 +57,18 @@ class QueueActivity : AppCompatActivity() {
         list.adapter = adapter
 
         clear.setOnClickListener { confirmStopAll() }
+
+        // Pause all keeps every partial file and progress, so resuming continues the
+        // transfers instead of restarting them. Toggles to "Resume all" while paused.
+        pauseAll.setOnClickListener {
+            if (DownloadQueue.pausedCount(this) > 0) {
+                DownloadService.resumeAll(this)
+            } else {
+                DownloadService.pauseAll(this)
+            }
+            reload()
+        }
+
         attachSwipeActions()
     }
 
@@ -110,6 +124,10 @@ class QueueActivity : AppCompatActivity() {
         empty.visibility = if (none) View.VISIBLE else View.GONE
         list.visibility = if (none) View.GONE else View.VISIBLE
         clear.visibility = if (none) View.GONE else View.VISIBLE
+
+        val paused = DownloadQueue.pausedCount(this)
+        pauseAll.visibility = if (none) View.GONE else View.VISIBLE
+        pauseAll.text = if (paused > 0) "Resume all ($paused)" else "Pause all"
     }
 
     private fun share(job: QueuedJob) {

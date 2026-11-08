@@ -21,6 +21,13 @@
             android:textAppearance="?attr/textAppearanceTitleLarge" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/queuePauseAll"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Pause all" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/queueClear"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"

@@ -381,6 +381,35 @@ class DownloadService : Service() {
             ctx.startService(Intent(ctx, DownloadService::class.java).setAction(ACTION_CANCEL))
         }
 
+        /**
+         * Pause one item. The row, progress and .part file are kept, so resuming continues
+         * rather than restarting. If this item is the one running, stop it without wiping
+         * its partials (FormatWorker.requestPause, not requestCancel).
+         */
+        fun pauseOne(ctx: Context, id: String) {
+            val wasRunning = DownloadQueue.isClaimed(id)
+            DownloadQueue.pause(ctx, id)
+            if (wasRunning) FormatWorker.requestPause()
+        }
+
+        fun resumeOne(ctx: Context, id: String) {
+            DownloadQueue.resume(ctx, id)
+            resume(ctx)
+        }
+
+        /** Pause every pending/running item. Failed rows are left visible as failures. */
+        fun pauseAll(ctx: Context): Int {
+            val ids = DownloadQueue.pauseAll(ctx)
+            if (ids.isNotEmpty()) FormatWorker.requestPause()
+            return ids.size
+        }
+
+        fun resumeAll(ctx: Context): Int {
+            val n = DownloadQueue.resumeAll(ctx)
+            if (n > 0) resume(ctx)
+            return n
+        }
+
         /** Kick the pump without enqueuing anything (used by queue retry). */
         fun resume(ctx: Context) {
             val i = Intent(ctx, DownloadService::class.java).setAction(ACTION_START)

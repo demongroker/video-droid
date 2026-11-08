@@ -20,6 +20,11 @@ data class QueuedJob(
     val failed: Boolean = false,
     /** Why the last attempt failed (shown on the row). */
     val failReason: String = "",
+    /**
+     * True when the owner paused this item. Paused rows keep their partial file and
+     * progress, are skipped by the pump, and are not counted as waiting.
+     */
+    val paused: Boolean = false,
 ) {
     val displayName: String
         get() = url.ifBlank { localPath.substringAfterLast('/') }
@@ -65,12 +70,12 @@ object DownloadQueue {
     }
 
     fun peek(ctx: Context): QueuedJob? = synchronized(lock) {
-        loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed }
+        loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed && !it.paused }
     }
 
-    /** Next item not already in flight, claimed for the calling worker. */
+    /** Next item not already in flight and not paused, claimed for the calling worker. */
     fun claimNext(ctx: Context): QueuedJob? = synchronized(lock) {
-        val next = loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed }
+        val next = loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed && !it.paused }
             ?: return@synchronized null
         claimed.add(next.id)
         next
@@ -96,6 +101,66 @@ object DownloadQueue {
         saveLocked(ctx, jobs)
         claimed.remove(id)
         true
+    }
+
+    /**
+     * Pause one item. Its claim is released so the pump stops immediately, but the
+     * row, progress and partial file are all kept so [resume] continues where it left off.
+     */
+    fun pause(ctx: Context, id: String) = synchronized(lock) {
+        claimed.remove(id)
+        val jobs = loadLocked(ctx)
+        val idx = jobs.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            jobs[idx] = jobs[idx].copy(paused = true)
+            saveLocked(ctx, jobs)
+        }
+    }
+
+    /** Resume one paused item; it becomes eligible for the pump again. */
+    fun resume(ctx: Context, id: String) = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        val idx = jobs.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            jobs[idx] = jobs[idx].copy(paused = false)
+            saveLocked(ctx, jobs)
+        }
+    }
+
+    /**
+     * Pause everything that is pending or in flight. Failed rows are left alone so they
+     * stay as visible failures. Returns the ids that were paused, so the service can stop
+     * any worker currently running those jobs.
+     */
+    fun pauseAll(ctx: Context): List<String> = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        val ids = ArrayList<String>()
+        for (i in jobs.indices) {
+            val j = jobs[i]
+            if (j.failed || j.paused) continue
+            ids.add(j.id)
+            jobs[i] = j.copy(paused = true)
+        }
+        if (ids.isNotEmpty()) saveLocked(ctx, jobs)
+        ids
+    }
+
+    /** Unpause everything. */
+    fun resumeAll(ctx: Context): Int = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        var n = 0
+        for (i in jobs.indices) {
+            val j = jobs[i]
+            if (!j.paused) continue
+            n++
+            jobs[i] = j.copy(paused = false)
+        }
+        if (n > 0) saveLocked(ctx, jobs)
+        n
+    }
+
+    fun pausedCount(ctx: Context): Int = synchronized(lock) {
+        loadLocked(ctx).count { it.paused }
     }
 
     /** Release the claim and drop the item (finished, failed or cancelled). */
@@ -128,9 +193,9 @@ object DownloadQueue {
 
     fun size(ctx: Context): Int = synchronized(lock) { loadLocked(ctx).size }
 
-    /** Items not yet claimed — what the UI shows as "queued". */
+    /** Items not yet claimed and not paused — what the UI shows as "queued". */
     fun waiting(ctx: Context): Int = synchronized(lock) {
-        loadLocked(ctx).count { it.id !in claimed && !it.failed }
+        loadLocked(ctx).count { it.id !in claimed && !it.failed && !it.paused }
     }
 
     fun setProgress(ctx: Context, id: String, progress: Int, partialPath: String) =
@@ -184,6 +249,7 @@ object DownloadQueue {
                         id = o.optString("id", "").ifEmpty { newId() },
                         failed = o.optBoolean("failed", false),
                         failReason = o.optString("failReason", ""),
+                        paused = o.optBoolean("paused", false),
                     ),
                 )
             }
@@ -231,6 +297,7 @@ object DownloadQueue {
                     put("partial", j.partialPath)
                     put("failed", j.failed)
                     put("failReason", j.failReason)
+                    put("paused", j.paused)
                 },
             )
         }

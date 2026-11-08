@@ -2,6 +2,27 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.0.3 (versionCode 67)
+
+### Pause and resume
+- **Pause all / Resume all** in the queue header. The button reads
+  `Pause all`, then `Resume all (N)` showing how many items are paused.
+- Pausing **keeps the partial file and progress** — resuming continues the
+  transfer instead of restarting it. This needed a new
+  `FormatWorker.requestPause()`: the existing `requestCancel()` deliberately
+  deletes the work directory, which is right for cancel and wrong for pause.
+- Paused rows are skipped by the pump and are not counted as waiting.
+  Failed rows are left visible as failures rather than being paused.
+- `paused` is persisted in `download_queue.json`, so pausing survives a restart.
+
+### Build
+- `build.sh` now uses `./gradlew` (wrapper, Gradle 8.11.1). It previously
+  called `gradle-8.9`, which the Android plugin rejects:
+  *"Minimum supported Gradle version is 8.11.1."*
+- `build.sh` links the keystore from `~/.video-droid-signing` and reads the
+  passwords from `CREDENTIALS.txt` into env vars, so nothing is hardcoded.
+- `lintVitalRelease` is skipped by default; pass `--with-lint` to include it.
+
 ## 2.0.2 (versionCode 66)
 
 ### Background, resumable updates
