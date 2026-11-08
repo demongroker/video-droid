@@ -133,6 +133,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         viewModelScope.launch {
+            // Duplicates must say so out loud. The service's enqueue() returns -1 for a link
+            // that is already queued, but start() is fire-and-forget, so before this check the
+            // owner tapped Add and saw nothing happen.
+            val duplicate = withContext(Dispatchers.IO) {
+                url.isNotEmpty() && DownloadQueue.has(ctx, url)
+            }
+            if (duplicate) {
+                _state.update {
+                    it.copy(
+                        busy = false,
+                        statusText = "Already in queue — that link is waiting.\nSee the Queue tab.",
+                    )
+                }
+                return@launch
+            }
             val queued = withContext(Dispatchers.IO) {
                 val already = DownloadQueue.size(ctx)
                 if (url.isNotEmpty()) {

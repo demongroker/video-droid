@@ -273,7 +273,12 @@ class QueueActivity : AppCompatActivity() {
                 running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
                 else -> if (job.progress > 0) "Waiting · ${job.progress}% done" else "Waiting"
             }
-            holder.sub.text = "${job.opts.dlQuality} · ${job.displayName}"
+            // While an item is actually transferring, show the live speed/ETA from yt-dlp
+            // rather than just the quality tag — that is the number worth glancing at.
+            val detail = if (running) DownloadService.liveDetail(job.id) else ""
+            holder.sub.text = listOf("${job.opts.dlQuality}", job.displayName, detail)
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
             if (running && job.progress > 0) {
                 holder.bar.visibility = View.VISIBLE
                 holder.bar.setProgressCompat(job.progress, false)

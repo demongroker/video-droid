@@ -87,6 +87,14 @@ class DownloadService : Service() {
                 FormatWorker.requestCancel()
                 publishGlobal("Cancelling...")
             }
+            ACTION_PAUSE -> {
+                pauseAll(this)
+                publishGlobal("Paused — tap Resume in the notification or the queue")
+            }
+            ACTION_RESUME -> {
+                resumeAll(this)
+                publishGlobal("Resuming...")
+            }
             ACTION_START -> {
                 val url = intent.getStringExtra(EXTRA_URL)
                 if (!url.isNullOrBlank() || intent.getStringExtra(EXTRA_LOCAL_PATH)?.isNotBlank() == true) {
@@ -108,7 +116,7 @@ class DownloadService : Service() {
                             localPath = intent.getStringExtra(EXTRA_LOCAL_PATH).orEmpty(),
                         ),
                     )
-                    if (added < 0) publishGlobal("Already in queue")
+                    if (added < 0) publishGlobal("Already in queue — that link is waiting. See the Queue tab.")
                 }
                 ensurePump()
             }
@@ -214,10 +222,43 @@ class DownloadService : Service() {
     private fun publish(id: String, jobLine: String) {
         lastJobLine = jobLine
         liveStatus[id] = jobLine
+        // Speed / ETA are per-item and come straight from yt-dlp's progress line, so surface
+        // them on the queue row instead of forcing the owner to open the log.
+        liveDetailMap[id] = parseDetail(jobLine)
         persistProgress(id, jobLine)
         val summary = summaryLine()
         updateNotification(composeNotif(withJobDetail(jobLine, id), summary))
         listener?.onStatus("$summary\n${withJobDetail(jobLine, id)}")
+    }
+
+    /** Pull "2.4MiB/s" and "ETA 00:03" out of a yt-dlp progress line. */
+    private fun parseDetail(jobLine: String): String {
+        val speed = SPEED_RE.find(jobLine)?.groupValues?.get(1)?.trim()
+        val eta = ETA_RE.find(jobLine)?.groupValues?.get(1)?.trim()?.let { prettyEta(it) }
+        return listOfNotNull(
+            speed,
+            eta?.let { "${it} left" }
+        ).joinToString(" · ")
+    }
+
+    /** 00:03:12 → 3m 12s; 01:20 → 1m 20s. Long ETAs read badly in a row subtitle. */
+    private fun prettyEta(raw: String): String {
+        val parts = raw.split(':').mapNotNull { it.toIntOrNull() }
+        val secs = when (parts.size) {
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            2 -> parts[0] * 60 + parts[1]
+            1 -> parts[0]
+            else -> return raw
+        }
+        if (secs <= 0) return raw
+        val h = secs / 3600
+        val m = (secs % 3600) / 60
+        val s = secs % 60
+        return when {
+            h > 0 -> "${h}h ${m}m"
+            m > 0 -> "${m}m ${s}s"
+            else -> "${s}s"
+        }
     }
 
     /** Status that is not tied to one item (start/cancel messages). */
@@ -375,6 +416,16 @@ class DownloadService : Service() {
             Intent(this, DownloadService::class.java).setAction(ACTION_CANCEL),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // Pause/resume from the shade: a stuck or unwanted transfer should not require
+        // opening the app, and the label has to reflect what is actually paused right now.
+        val pausedNow = runCatching { DownloadQueue.pausedCount(this) }.getOrDefault(0)
+        val toggleAction = if (pausedNow > 0) ACTION_RESUME else ACTION_PAUSE
+        val toggleLabel = if (pausedNow > 0) "Resume" else "Pause"
+        val toggle = PendingIntent.getService(
+            this, 2,
+            Intent(this, DownloadService::class.java).setAction(toggleAction),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val pct = Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""").find(msg)?.groupValues?.get(1)?.toIntOrNull()
         val first = msg.lineSequence().firstOrNull() ?: msg
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -385,6 +436,7 @@ class DownloadService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
+            .addAction(0, toggleLabel, toggle)
             .addAction(0, "Cancel", cancel)
         if (pct != null) {
             builder.setProgress(100, pct, false)
@@ -410,6 +462,20 @@ class DownloadService : Service() {
         /** How often to re-check the radio while "waiting for connection". */
         private const val NET_PROBE_MS = 60_000L
 
+        /** `2.4MiB/s`, `850.12KiB/s` — yt-dlp's progress rate. */
+        private val SPEED_RE = Regex("""([\d.]+\s*[KMG]i?B/s)""")
+
+        /** `ETA 00:03` / `ETA 01:20:05`. */
+        private val ETA_RE = Regex("""ETA\s+(\d+(?::\d+){0,2})""")
+
+        /**
+         * Live "speed · ETA" for one queue item, or "" when it is not transferring.
+         * Lives in the companion so the queue UI can read it without binding to the service.
+         */
+        private val liveDetailMap = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+        fun liveDetail(id: String): String = liveDetailMap[id].orEmpty()
+
         /**
          * After this many probes with no active network, stop claiming the transfer will
          * resume by itself and tell the owner to resume manually instead.
@@ -425,6 +491,8 @@ class DownloadService : Service() {
 
         const val ACTION_START = "com.xerxes.videodroid.START"
         const val ACTION_CANCEL = "com.xerxes.videodroid.CANCEL"
+        const val ACTION_PAUSE = "com.xerxes.videodroid.PAUSE_ALL"
+        const val ACTION_RESUME = "com.xerxes.videodroid.RESUME_ALL"
         const val EXTRA_URL = "url"
         const val EXTRA_DLQ = "dlq"
         const val EXTRA_HEIGHT = "height"

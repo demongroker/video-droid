@@ -2,6 +2,25 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.1 (versionCode 70)
+
+### Duplicate links say so out loud
+Tapping Add on a link that is already queued (live, paused, failed, or waiting out a
+retry) used to do nothing — the queue's `enqueue()` returns -1 but that runs inside a
+fire-and-forget service intent, so the owner tapped Add and saw no change. The check now
+runs in the view model *before* the intent, and the screen reads "Already in queue — that
+link is waiting. See the Queue tab."
+
+### Speed and ETA on each row
+While an item is actually transferring, its queue row now shows the live yt-dlp rate
+("2.4MiB/s · 3m 12s left") instead of only the quality tag, and the notification detail
+carries the same numbers.
+
+### Pause / Resume from the notification
+The foreground notification now carries a **Pause**/**Resume** action beside Cancel, so a
+stuck transfer can be stopped from the shade without opening the app. The label reflects
+what is actually paused right now.
+
 ## 2.1.0 (versionCode 69)
 
 ### Per-item pause / resume

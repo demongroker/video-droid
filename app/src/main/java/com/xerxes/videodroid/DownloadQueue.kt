@@ -65,6 +65,12 @@ object DownloadQueue {
         return m
     }
 
+    /** Is this URL already queued (live, paused, failed or waiting out a retry)? */
+    fun has(ctx: Context, url: String): Boolean = synchronized(lock) {
+        val u = url.trim()
+        u.isNotEmpty() && loadLocked(ctx).any { it.url.trim() == u }
+    }
+
     /** New queue size, or **-1** when this URL is already queued. */
     fun enqueue(ctx: Context, job: QueuedJob): Int = synchronized(lock) {
         val jobs = loadLocked(ctx)
