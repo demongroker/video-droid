@@ -607,6 +607,19 @@
                     android:text="Changelog"
                     android:textAllCaps="false"
                     android:textColor="@color/vd_text_dim" />
+
+                <!-- Exit: stops the service and kills the process, so the app is
+                     actually gone rather than sitting in the background. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/exitButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="start|center_vertical"
+                    android:text="Exit VideoDroid"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_danger" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

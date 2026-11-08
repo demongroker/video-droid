@@ -2,6 +2,15 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.2 (versionCode 71)
+
+### Exit VideoDroid
+A new **Exit VideoDroid** button sits in the "More" section. Tapping it really
+leaves — it stops the download service, cancels the resume worker, closes every
+activity, and kills the process, so the app is gone rather than lingering in the
+background. If a download is live it warns first: exiting stops the transfer, and
+anything still queued stays queued for next time.
+
 ## 2.1.1 (versionCode 70)
 
 ### Duplicate links say so out loud

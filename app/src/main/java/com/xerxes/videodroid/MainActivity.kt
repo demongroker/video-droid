@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
         findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
+        findViewById<Button>(R.id.exitButton).setOnClickListener { confirmExit() }
         setupParallelSpinner()
         findViewById<Button>(R.id.batteryButton).setOnClickListener { toggleBatteryOptimisation() }
         refreshBatteryButton()
@@ -312,6 +313,42 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     fun jobIsRunning(): Boolean = vm.state.value.busy || DownloadQueue.size(this) > 0
+
+    /** Exit: warn first when a transfer is live, then really leave. */
+    private fun confirmExit() {
+        if (!jobIsRunning()) {
+            exitApp()
+            return
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Exit VideoDroid?")
+            .setMessage(
+                "A download is still in progress. Exiting stops it — anything left " +
+                    "in the queue stays queued for the next time you open the app.",
+            )
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton("Exit") { _, _ -> exitApp() }
+            .show()
+    }
+
+    /**
+     * Leave for real. finishAffinity() alone only closes the UI, and the download
+     * service is START_STICKY with a resume worker behind it — so all three have to
+     * go, in this order, or the app comes back on its own.
+     */
+    private fun exitApp() {
+        runCatching { stopService(Intent(this, DownloadService::class.java)) }
+        runCatching {
+            androidx.work.WorkManager.getInstance(applicationContext)
+                .cancelUniqueWork(QueueResumeWorker.NAME)
+        }
+        finishAffinity()
+        // 250 ms lets the activity finish cleanly before the process disappears, so
+        // the exit does not look like a crash.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }, 250)
+    }
 
     fun showUpdateStatus(msg: String) {
         runOnUiThread {
