@@ -56,7 +56,7 @@ class QueueActivity : AppCompatActivity() {
         )
         list.adapter = adapter
 
-        clear.setOnClickListener { confirmStopAll() }
+        clear.setOnClickListener { showQueueMenu(it) }
 
         // Pause all keeps every partial file and progress, so resuming continues the
         // transfers instead of restarting them. Toggles to "Resume all" while paused.
@@ -194,6 +194,39 @@ class QueueActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Bulk actions. Retry failed / Clear failed are the two that matter after a batch of bad
+     * links — ten dead X rows should be one tap to clear, not ten swipes, and one tap to retry
+     * once X login is sorted out.
+     */
+    private fun showQueueMenu(anchor: View) {
+        val failed = jobs.count { it.failed }
+        val menu = android.widget.PopupMenu(this, anchor)
+        var idx = 0
+        val retryId = if (failed > 0) { menu.menu.add(0, idx++, 0, "Retry failed ($failed)"); idx - 1 } else -1
+        val clearFailedId = if (failed > 0) { menu.menu.add(0, idx++, 1, "Clear failed ($failed)"); idx - 1 } else -1
+        menu.menu.add(0, idx++, 2, "Clear all")
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                retryId -> {
+                    val n = DownloadQueue.retryAllFailed(this)
+                    DownloadService.resume(this)
+                    android.widget.Toast.makeText(this, "Retrying $n item(s)", android.widget.Toast.LENGTH_SHORT).show()
+                    reload()
+                    true
+                }
+                clearFailedId -> {
+                    val n = DownloadQueue.clearFailed(this)
+                    android.widget.Toast.makeText(this, "Cleared $n failed item(s)", android.widget.Toast.LENGTH_SHORT).show()
+                    reload()
+                    true
+                }
+                else -> { confirmStopAll(); true }
+            }
+        }
+        menu.show()
+    }
+
     private fun confirmStopAll() {
         val running = DownloadQueue.inFlightIds().size
         AlertDialog.Builder(this)
@@ -218,6 +251,8 @@ class QueueActivity : AppCompatActivity() {
             val sub: TextView = v.findViewById(R.id.queueRowSub)
             val bar: LinearProgressIndicator = v.findViewById(R.id.queueRowProgress)
             val cancel: View = v.findViewById(R.id.queueRowCancel)
+            val pause: com.google.android.material.button.MaterialButton =
+                v.findViewById(R.id.queueRowPause)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
@@ -234,6 +269,7 @@ class QueueActivity : AppCompatActivity() {
 
             holder.title.text = when {
                 job.failed -> "Failed — ${job.failReason.ifBlank { "tap to retry" }}"
+                job.paused -> if (job.progress > 0) "Paused · ${job.progress}% done" else "Paused"
                 running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
                 else -> if (job.progress > 0) "Waiting · ${job.progress}% done" else "Waiting"
             }
@@ -246,6 +282,16 @@ class QueueActivity : AppCompatActivity() {
             }
             holder.cancel.visibility = if (job.failed) View.GONE else View.VISIBLE
             holder.cancel.setOnClickListener { cancelOne(job) }
+
+            // Pause/Resume per row. Failed rows have nothing to pause.
+            holder.pause.visibility = if (job.failed) View.GONE else View.VISIBLE
+            holder.pause.text = if (job.paused) "Resume" else "Pause"
+            holder.pause.setOnClickListener {
+                if (job.paused) DownloadService.resumeOne(this@QueueActivity, job.id)
+                else DownloadService.pauseOne(this@QueueActivity, job.id)
+                reload()
+            }
+
             holder.itemView.setOnClickListener {
                 if (job.failed) retry(job) else openItem(job)
             }

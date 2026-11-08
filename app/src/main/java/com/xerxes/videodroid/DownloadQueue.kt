@@ -25,6 +25,10 @@ data class QueuedJob(
      * progress, are skipped by the pump, and are not counted as waiting.
      */
     val paused: Boolean = false,
+    /** How many times this job has been attempted; drives the retry backoff. */
+    val attempts: Int = 0,
+    /** Epoch ms before which this job must not be picked up again (retry backoff). */
+    val retryAfter: Long = 0L,
 ) {
     val displayName: String
         get() = url.ifBlank { localPath.substringAfterLast('/') }
@@ -42,6 +46,10 @@ object DownloadQueue {
     private const val FILE = "download_queue.json"
     private const val TAG = "VideoDroid.Queue"
     private const val CORRUPT_MSG = "Queue file corrupt. Backup kept."
+
+    /** Attempts before a transient failure is given up on (1 initial + 3 retries is too many; 3 total). */
+    private const val MAX_ATTEMPTS = 3
+
     private val lock = Any()
 
     /** ids currently held by a worker. */
@@ -69,16 +77,87 @@ object DownloadQueue {
         jobs.size
     }
 
+    /**
+     * Eligible for the pump: not claimed, not failed, not paused, and past its retry backoff.
+     * A job waiting out a backoff stays visible as "Waiting" and is picked up on a later pump.
+     */
+    private fun eligible(j: QueuedJob): Boolean =
+        j.id !in claimed && !j.failed && !j.paused && j.retryAfter <= System.currentTimeMillis()
+
     fun peek(ctx: Context): QueuedJob? = synchronized(lock) {
-        loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed && !it.paused }
+        loadLocked(ctx).firstOrNull { eligible(it) }
     }
 
     /** Next item not already in flight and not paused, claimed for the calling worker. */
     fun claimNext(ctx: Context): QueuedJob? = synchronized(lock) {
-        val next = loadLocked(ctx).firstOrNull { it.id !in claimed && !it.failed && !it.paused }
+        val next = loadLocked(ctx).firstOrNull { eligible(it) }
             ?: return@synchronized null
         claimed.add(next.id)
         next
+    }
+
+    /** Earliest epoch ms at which some job becomes eligible again (0 if none waiting). */
+    fun nextRetryAt(ctx: Context): Long = synchronized(lock) {
+        val now = System.currentTimeMillis()
+        loadLocked(ctx)
+            .filter { it.id !in claimed && !it.failed && !it.paused && it.retryAfter > now }
+            .minOfOrNull { it.retryAfter } ?: 0L
+    }
+
+    /**
+     * Record a failure. Network-shaped failures are retried with backoff
+     * ([RETRY_BACKOFF_MS]) instead of being parked as permanently failed — a dropped radio
+     * should not need the owner to come back and tap retry. After [MAX_ATTEMPTS] the job is
+     * marked failed for real so a dead link cannot spin forever.
+     *
+     * Anything that is not a network problem (bad URL, private post, unsupported site) fails
+     * immediately: retrying those just burns battery and re-downloads nothing.
+     */
+    fun markFailure(ctx: Context, id: String, reason: String) = synchronized(lock) {
+        claimed.remove(id)
+        val jobs = loadLocked(ctx)
+        val idx = jobs.indexOfFirst { it.id == id }
+        if (idx < 0) return@synchronized
+        val cur = jobs[idx]
+        val attempts = cur.attempts + 1
+        val retryable = isRetryableReason(reason) && attempts <= MAX_ATTEMPTS
+        jobs[idx] = if (retryable) {
+            cur.copy(
+                attempts = attempts,
+                retryAfter = System.currentTimeMillis() + retryDelayMs(attempts),
+                failReason = reason.take(200),
+            )
+        } else {
+            cur.copy(
+                attempts = attempts,
+                retryAfter = 0L,
+                failed = true,
+                failReason = reason.take(200),
+            )
+        }
+        saveLocked(ctx, jobs)
+    }
+
+    /** Network-shaped failures are worth retrying; bad URLs and auth problems are not. */
+    fun isRetryableReason(reason: String): Boolean {
+        val s = reason.lowercase()
+        if (s.isBlank()) return false
+        val permanent = listOf(
+            "profile link", "no video", "unsupported", "404", "file gone",
+            "need x login", "private", "format is gone", "tls bad",
+        )
+        if (permanent.any { s.contains(it) }) return false
+        val transient = listOf(
+            "no network", "timeout", "timed out", "connection", "reset",
+            "unreachable", "enotconn", "econnrefused", "offline", "network",
+        )
+        return transient.any { s.contains(it) }
+    }
+
+    private fun retryDelayMs(attempts: Int): Long = when (attempts) {
+        1 -> 30_000L          // 30 s
+        2 -> 120_000L         // 2 min
+        else -> 600_000L      // 10 min
     }
 
     /** Keep the item visible as failed instead of silently dropping it. */
@@ -161,6 +240,37 @@ object DownloadQueue {
 
     fun pausedCount(ctx: Context): Int = synchronized(lock) {
         loadLocked(ctx).count { it.paused }
+    }
+
+    /**
+     * Drop every failed row, keeping live downloads and paused items untouched.
+     * Returns how many were removed.
+     */
+    fun clearFailed(ctx: Context): Int = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        val before = jobs.size
+        jobs.removeAll { it.failed }
+        val removed = before - jobs.size
+        for (id in claimed.toList()) if (jobs.none { it.id == id }) claimed.remove(id)
+        if (removed > 0) saveLocked(ctx, jobs)
+        removed
+    }
+
+    /**
+     * Clear the failed flag on every failed row so the pump picks them up again.
+     * Returns how many were reset.
+     */
+    fun retryAllFailed(ctx: Context): Int = synchronized(lock) {
+        val jobs = loadLocked(ctx)
+        var n = 0
+        for (i in jobs.indices) {
+            val j = jobs[i]
+            if (!j.failed) continue
+            n++
+            jobs[i] = j.copy(failed = false, failReason = "", progress = 0, partialPath = "")
+        }
+        if (n > 0) saveLocked(ctx, jobs)
+        n
     }
 
     /** Release the claim and drop the item (finished, failed or cancelled). */

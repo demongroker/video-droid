@@ -2,6 +2,29 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.0 (versionCode 69)
+
+### Per-item pause / resume
+2.0.3 could only pause the whole queue. Each row now has its own **Pause** button that
+becomes **Resume** while paused, so one slow transfer can be stopped without touching the
+rest. A paused row reads `Paused · 40% done` instead of showing a stale percentage, and
+failed rows hide the button because there is nothing to pause.
+
+### Bounded retry with backoff
+A dropped radio used to park the item in the failed list until the owner came back and
+tapped it. Failures are now classified:
+- **network-shaped** (`no network`, `timeout`, `connection reset`, `unreachable`, …) are
+  retried at **30 s → 2 min → 10 min**, up to 3 attempts, then marked failed for real.
+- **permanent** (`profile link`, `no video`, `unsupported`, `404`, `need x login`,
+  `private`, …) fail immediately — retrying a bad URL only burns battery.
+The pump is woken at the earliest retry time, so a backed-off item is not stranded
+"Waiting" until something else happens to arrive.
+
+### Bulk actions
+The header's Clear button is now a menu: **Retry failed (N)**, **Clear failed (N)**,
+**Clear all**. The first two only appear when something has actually failed, so ten dead
+links are one tap to clear and one tap to retry once X login is sorted.
+
 ## 2.0.4 (versionCode 68)
 
 ### Connectivity watchdog

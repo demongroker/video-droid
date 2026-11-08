@@ -162,7 +162,8 @@ class DownloadService : Service() {
             if (res.ok) {
                 DownloadQueue.finish(applicationContext, job.id)
             } else {
-                DownloadQueue.markFailed(applicationContext, job.id, res.message)
+                DownloadQueue.markFailure(applicationContext, job.id, res.message)
+                scheduleRetryPump()
             }
             liveStatus.remove(job.id)
             listener?.onFinished(res)
@@ -297,6 +298,20 @@ class DownloadService : Service() {
         netProbe?.let { netProbeHandler.removeCallbacks(it) }
         netProbe = null
         netLostMinutes = 0
+    }
+
+    /**
+     * A retryable failure left an item waiting out its backoff. Nothing else will wake the
+     * pump for it, so schedule one check at the earliest retry time — otherwise the item sits
+     * "Waiting" until the user happens to add something else.
+     */
+    private fun scheduleRetryPump() {
+        val at = DownloadQueue.nextRetryAt(applicationContext)
+        if (at <= 0L) return
+        val delay = (at - System.currentTimeMillis()).coerceAtLeast(1_000L)
+        netProbeHandler.postDelayed({
+            if (isRunning) ensurePump()
+        }, delay)
     }
 
     /** React to the radio coming back instead of waiting for a socket timeout. */

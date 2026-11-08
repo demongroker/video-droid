@@ -42,6 +42,14 @@
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
+        android:id="@+id/queueRowPause"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minWidth="0dp"
+        android:text="Pause" />
+
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/queueRowCancel"
         style="@style/Widget.Material3.Button.TextButton"
         android:layout_width="wrap_content"
