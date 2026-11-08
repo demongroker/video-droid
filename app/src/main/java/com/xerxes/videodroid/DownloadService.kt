@@ -12,7 +12,9 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
@@ -243,6 +245,60 @@ class DownloadService : Service() {
     @Volatile
     private var networkLost = false
 
+    // Watchdog state: the callback alone is not reliable enough to un-stick a lost network.
+    private val netProbeHandler = Handler(Looper.getMainLooper())
+    private var netProbe: Runnable? = null
+    private var netLostMinutes = 0
+
+    /**
+     * Re-probe the radio while [networkLost] is set.
+     *
+     * Relying only on the NetworkCallback is the bug that made the queue hang on
+     * "Waiting for connection… (resumes automatically)" for hours: if `onAvailable` never
+     * arrives — radio flap while the screen is off, doze, or the callback dying with the
+     * process — the flag latches true forever and nothing ever re-checks. So poll, and after
+     * [NET_LOST_GIVE_UP_MIN] minutes stop promising a resume and say so plainly.
+     */
+    private fun startNetProbe() {
+        if (netProbe != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val r = object : Runnable {
+            override fun run() {
+                if (!networkLost) {
+                    stopNetProbe()
+                    return
+                }
+                if (cm.activeNetwork != null) {
+                    networkLost = false
+                    netLostMinutes = 0
+                    stopNetProbe()
+                    if (isRunning) {
+                        publishGlobal("Connection restored — resuming…")
+                        resume(this@DownloadService)
+                    }
+                    return
+                }
+                netLostMinutes++
+                if (netLostMinutes >= NET_LOST_GIVE_UP_MIN) {
+                    if (isRunning) {
+                        publishGlobal("No connection for ${netLostMinutes}m — paused. Tap Resume all.")
+                    }
+                    stopNetProbe()
+                } else {
+                    netProbeHandler.postDelayed(this, NET_PROBE_MS)
+                }
+            }
+        }
+        netProbe = r
+        netProbeHandler.postDelayed(r, NET_PROBE_MS)
+    }
+
+    private fun stopNetProbe() {
+        netProbe?.let { netProbeHandler.removeCallbacks(it) }
+        netProbe = null
+        netLostMinutes = 0
+    }
+
     /** React to the radio coming back instead of waiting for a socket timeout. */
     private fun watchNetwork() {
         if (netCallback != null) return
@@ -251,11 +307,13 @@ class DownloadService : Service() {
             override fun onLost(network: Network) {
                 networkLost = true
                 if (isRunning) publishGlobal("Waiting for connection… (resumes automatically)")
+                startNetProbe()
             }
 
             override fun onAvailable(network: Network) {
                 if (!networkLost) return
                 networkLost = false
+                stopNetProbe()
                 if (isRunning) publishGlobal("Connection restored — resuming…")
             }
         }
@@ -333,6 +391,15 @@ class DownloadService : Service() {
         private const val PREFS = "videodroid"
         const val KEY_PARALLEL = "parallel_downloads"
         const val DEFAULT_PARALLEL = 3
+
+        /** How often to re-check the radio while "waiting for connection". */
+        private const val NET_PROBE_MS = 60_000L
+
+        /**
+         * After this many probes with no active network, stop claiming the transfer will
+         * resume by itself and tell the owner to resume manually instead.
+         */
+        private const val NET_LOST_GIVE_UP_MIN = 5
 
         private val JOB_PCT =
             Regex("""(?:Downloading|Converting(?: \([^)]+\))?|Trimming) (\d+)%""")

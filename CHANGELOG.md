@@ -2,6 +2,29 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.0.4 (versionCode 68)
+
+### Connectivity watchdog
+- "Waiting for connection… (resumes automatically)" could hang for hours. The
+  `NetworkCallback` alone was not enough: `onLost` latched a flag and if
+  `onAvailable` never arrived (radio flap while the screen was off, doze, or the
+  callback dying with the process) nothing ever re-checked, so the queue sat
+  behind a promise the code did not keep.
+- While the network is marked lost, the radio is now re-probed every 60 s. On
+  success the flag clears, "Connection restored — resuming…" is published and the
+  pump is kicked.
+- After 5 minutes with no active network it stops pretending: publishes
+  "No connection for 5m — paused. Tap Resume all." and goes quiet.
+
+### Honest X/Twitter errors
+`mapError()` now takes the URL, so "No video in this tweet" is split into what it
+actually means:
+- pasted URL has **no** `/status/` → *"That's a profile link, not a post — open
+  the post and share its link"* (the commonest real mistake)
+- has `/status/` → *"No video in that post (or X login needed)"*
+- auth failures → *"Need X login — Settings → Log in to X"*, pointing at the
+  screen that already exists
+
 ## 2.0.3 (versionCode 67)
 
 ### Pause and resume

@@ -550,7 +550,7 @@ object FormatWorker {
             if (cancelRequested.get() || isCancelMessage(e.message)) {
                 FormatResult(false, "Cancelled")
             } else {
-                FormatResult(false, mapError(e.message ?: e.toString()))
+                FormatResult(false, mapError(e.message ?: e.toString(), url))
             }
         }
     }
@@ -573,8 +573,17 @@ object FormatWorker {
 
     private class NoMediaOnPageException : Exception("No downloadable video found on this page")
 
-    fun mapError(raw: String): String {
+    /**
+     * Turn a raw yt-dlp error into something the owner can act on.
+     *
+     * [url] matters for the X/Twitter cases: yt-dlp says "No video in this tweet" both for a
+     * post that genuinely has no video **and** for a profile/timeline URL, which is by far the
+     * commonest mistake when pasting links. Telling the user to open the post is only useful
+     * advice when they actually pasted a profile.
+     */
+    fun mapError(raw: String, url: String? = null): String {
         val s = raw.lowercase()
+        val looksLikePost = url?.contains("/status/", ignoreCase = true) == true
         if (s.contains("cancel")) return "Cancelled"
         if (s.contains("no downloadable video")) {
             return "No downloadable video found on this page"
@@ -597,9 +606,15 @@ object FormatWorker {
         ) {
             return "Site TLS bad. Open page."
         }
-        if (s.contains("need x login")) return "Need X login"
+        if (s.contains("need x login")) {
+            return "Need X login — Settings → Log in to X"
+        }
         if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
-            return "No video in this tweet"
+            return if (looksLikePost) {
+                "No video in that post (or X login needed)"
+            } else {
+                "That's a profile link, not a post — open the post and share its link"
+            }
         }
         if (s.contains("sign in") || s.contains("login") || s.contains("cookie")
             || s.contains("authentication") || s.contains("private video")
