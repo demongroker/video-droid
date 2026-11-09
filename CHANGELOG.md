@@ -2,6 +2,27 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.6 (versionCode 85)
+
+### "Already in library — skipped" was refusing brand-new videos
+Reported as *"tried to download this but always crash"*. The device log showed the truth:
+`Downloaded: 425 MB` → `Already in library — skipped`, three times, ~1.3 GB burnt and nothing
+saved. The duplicate guard matched the six-digit status tag with a plain `LIKE '%<tag>%'`, so
+**any** file whose name contained those digits anywhere counted as the same video — and a
+Library full of `video_720p_Original_<timestamp>.mp4` names is full of digit runs.
+
+- Exact display-name match first, then a **segment-anchored, escaped** match
+  (`LIKE '%\_<tag>\_%' ESCAPE '\'`): `_861035_` must be its own underscore-delimited piece.
+- The `Download/VideoDroid/duplicates` folder no longer counts as "present", so moving files
+  aside with *Find duplicates* actually frees the name up.
+- For an X link the tag is known from the URL, so the check runs **before** the download
+  instead of after 425 MB.
+
+Also in this build: **2.2.4** (nothing truncated can be reported as Saved — `.part`, <1 KB,
+short versus advertised size, unreadable container) and **2.2.5** (per-job progress callback
+and per-job diagnostics, so parallel downloads stop mixing their percentages and exceptions
+in the log).
+
 ## 2.2.5 (versionCode 84)
 
 ### Diagnostics stop lying about which job is which
