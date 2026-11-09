@@ -233,6 +233,16 @@
                 android:textColor="@color/vd_text_dim" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/crashLogsButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Crash logs"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/copyLogButton"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="match_parent"
@@ -248,6 +258,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="26dp"
                 android:gravity="center"
+                android:padding="12dp"
                 android:text=""
                 android:textColor="@color/vd_danger"
                 android:textSize="12sp" />

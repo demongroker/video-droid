@@ -722,6 +722,8 @@ object FormatWorker {
             }
         } catch (e: Throwable) {
             JobDiag.noteException(e.message ?: e.toString())
+            // Non-fatal: the worker survived, but the job failed — keep a record.
+            CrashLog.writeNonFatal(context, "download", e)
             JobDiag.finishJob()
             if (cancelRequested.get() || isCancelMessage(e.message)) {
                 FormatResult(false, "Cancelled")

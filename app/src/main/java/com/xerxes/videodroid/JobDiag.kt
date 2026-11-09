@@ -101,6 +101,8 @@ object JobDiag {
     fun noteStatus(raw: String) {
         val s = redact(raw).trim()
         if (s.isEmpty()) return
+        // Mirror into the crash-report ring buffer (bounded, 200 lines).
+        AppLog.add(s)
         lastStatusLine = s
         synchronized(lock) {
             if (ring.isNotEmpty() && ring.last() == s) {

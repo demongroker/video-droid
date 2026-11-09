@@ -114,6 +114,9 @@ The bundled yt-dlp is frozen inside the APK, so a site change would otherwise ne
   Caveat: this hides the folder from the media scanner and most gallery apps, but rows that were
   inserted through MediaStore on Android 10+ can still be listed by a determined gallery app.
 - Cookies stay on the phone. Nothing is uploaded anywhere.
+- **Crash logs stay on the phone too.** An uncaught exception or a failed worker is written to
+  `filesDir/crashes`, readable in **Settings → Crash logs** with Copy and Share; the last 200
+  log lines are attached and URL query strings / tokens are stripped before anything is saved.
 
 ## Updates
 

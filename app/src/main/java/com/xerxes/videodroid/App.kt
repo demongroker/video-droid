@@ -23,14 +23,10 @@ class App : PyApplication() {
         runCatching { EngineUpdateWorker.schedule(this) }
         runCatching { HashBackfillWorker.schedule(this) }
 
-        if (CrashHandler.hasCrash(this)) {
-            runCatching {
-                startActivity(
-                    Intent(this, CrashActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-                )
-            }
-        }
+        // A crash no longer hijacks the launch: MainActivity shows a one-time banner
+        // ("VideoDroid crashed last time — view log?") and the record itself lives in
+        // filesDir/crashes, reachable from Settings -> Crash logs.
+        AppLog.add("app start ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
 
         // Re-arm a queue left behind by a killed process. download_queue.json survives, but
         // the foreground service that was driving it does not, and nothing else would pick

@@ -175,6 +175,53 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- One-time banner after a crash: the log is on disk, never uploaded. -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/crashBanner"
+                style="@style/Widget.VideoDroid.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="VideoDroid crashed last time — view log?"
+                        android:textColor="@color/vd_text"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/crashBannerView"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="View"
+                        android:textAllCaps="false"
+                        android:textColor="@color/vd_violet_soft" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/crashBannerDismiss"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="40dp"
+                        android:text="✕"
+                        android:textColor="@color/vd_text_dim" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- ── Download button ───────────────────────────────────── -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/goButton"

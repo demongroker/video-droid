@@ -2,6 +2,31 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.3.6 (versionCode 92)
+
+### Local crash log — the phone tells you what broke
+Downloads fail on a phone nobody can attach a debugger to, so the app now keeps its own
+record of what went wrong. Nothing is uploaded, there is no analytics SDK, and nothing leaves
+the device unless Share is tapped.
+
+- A global uncaught-exception handler writes `filesDir/crashes/crash_YYYY-MM-DD_HH-mm-ss.txt`
+  and then hands off to the platform handler, so the app still closes normally.
+- Each record carries the timestamp, app version + versionCode, Android version, device model,
+  thread name, full stack trace, and the last 200 lines of the in-memory app log.
+- Caught worker errors (download / FFmpeg / yt-dlp failures) are stored beside them as
+  `nonfatal_…` entries, so an "it just fails" job leaves a trace too.
+- Newest 20 files are kept; older ones are deleted automatically — non-fatal records first, so
+  a real crash is the last thing thrown away.
+- **Privacy:** every line passes through a redactor that strips URL query strings and fragments
+  and blanks out cookie or token material before anything is written.
+- **Settings → Crash logs** lists the records newest-first, opens one to read, and offers Copy,
+  Share (Android share sheet via FileProvider) and Clear all behind a confirmation.
+- After a crash, the next launch shows a one-time banner: "VideoDroid crashed last time — view
+  log?" with View / Dismiss.
+- Debug builds: seven taps on the version line in Settings forces a test crash, so the writer
+  and the viewer can be checked on demand. The body of that helper is behind `BuildConfig.DEBUG`
+  and is compiled out of release builds.
+
 ## 2.3.5 (versionCode 91)
 
 ### The hardening pass before this went public

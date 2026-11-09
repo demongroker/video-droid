@@ -63,6 +63,9 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
 
+        findViewById<Button>(R.id.crashLogsButton).setOnClickListener {
+            runCatching { startActivity(Intent(this, CrashLogActivity::class.java)) }
+        }
         findViewById<Button>(R.id.engineUpdateButton).setOnClickListener { updateEngine() }
         refreshEngineRow()
 
@@ -70,8 +73,38 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.hideGalleryButton).setOnClickListener { toggleHideGallery() }
         refreshPrivacyRows()
 
-        findViewById<android.widget.TextView>(R.id.settingsVersion).text =
-            "VideoDroid ${installedVersion()}"
+        val versionLabel = findViewById<android.widget.TextView>(R.id.settingsVersion)
+        versionLabel.text = "VideoDroid ${installedVersion()} · About"
+        wireAboutTapToCrash(versionLabel)
+    }
+
+    // ---- About: hidden crash trigger (debug builds only) ------------------------------
+
+    private var versionTaps = 0
+
+    /**
+     * Seven taps on the version line force a crash so the log writer and the viewer can be
+     * exercised without waiting for a real bug. Compiled out of release builds: the whole body
+     * is behind [BuildConfig.DEBUG], which R8 folds to `false`.
+     */
+    private fun wireAboutTapToCrash(label: android.widget.TextView) {
+        if (!BuildConfig.DEBUG) return
+        label.setOnClickListener {
+            versionTaps++
+            val left = 7 - versionTaps
+            if (left in 1..4) toast("$left more tap${if (left == 1) "" else "s"}…")
+            if (versionTaps >= 7) {
+                versionTaps = 0
+                toasty("Crashing on purpose (debug build)")
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    throw RuntimeException("VideoDroid test crash — triggered from About")
+                }, 300)
+            }
+        }
+    }
+
+    private fun toasty(msg: String) {
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     // ---- downloads -----------------------------------------------------------------

@@ -119,6 +119,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         wireClipboardBanner()
+        wireCrashBanner()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -737,6 +738,26 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     /** Offer a copied link as soon as the screen becomes visible again. */
+    // ── Local crash log banner ───────────────────────────────────────────────────
+    /**
+     * One-time notice that the previous run died, with the record already on disk. Nothing is
+     * uploaded; the banner only points at Settings → Crash logs (or opens it directly).
+     */
+    private fun wireCrashBanner() {
+        val banner = findViewById<View>(R.id.crashBanner) ?: return
+        if (!CrashLog.hasPending(this)) return
+        banner.visibility = View.VISIBLE
+        findViewById<Button>(R.id.crashBannerView).setOnClickListener {
+            banner.visibility = View.GONE
+            CrashLog.clearPending(this)
+            runCatching { startActivity(Intent(this, CrashLogActivity::class.java)) }
+        }
+        findViewById<Button>(R.id.crashBannerDismiss).setOnClickListener {
+            banner.visibility = View.GONE
+            CrashLog.clearPending(this)
+        }
+    }
+
     // ── Stage 2: clipboard detect ────────────────────────────────────────────────
     private var pendingClipboardUrl: String? = null
     private var dismissedClipboardUrl: String? = null
