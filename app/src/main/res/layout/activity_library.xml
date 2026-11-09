@@ -48,6 +48,20 @@
                 android:max="100"
                 android:progressBackgroundTint="@color/vd_outline"
                 android:progressTint="@color/vd_emerald" />
+
+            <Button
+                android:id="@+id/findDuplicates"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:minHeight="40dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="Find duplicates"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_emerald"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <GridView

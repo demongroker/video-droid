@@ -2,6 +2,30 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.7 (versionCode 76)
+
+### X login stops poisoning every download
+A `cookies.txt` whose `auth_token` has expired makes **every** X request fail with
+"Could not authenticate you", while guest access still works for public posts. The
+file was used whenever it was non-empty, so one stale login broke everything and
+every row was reported as "Need X login".
+- A job that fails in an authentication-shaped way now retries **once without the
+  cookies**, and the dead file is renamed to `cookies.txt.stale` (never deleted) so
+  the next job does not hit it again. You get "X login expired — cleared."
+- Only messages that actually mention authentication may say "Need X login". A
+  401/403, a protected or deleted post, or a rate limit now reads
+  *"X refused this request — post may be private, deleted or rate limited"* and is
+  treated as retryable instead of being parked as permanent.
+- A blocked FxTwitter/vxTwitter fallback is no longer reported as a login problem.
+
+### Find duplicates in the Library
+The Library header has a **Find duplicates** action. It groups videos that are the
+same media (a `_<timestamp>` collision suffix, or the same X status tag under two
+different names) and offers to move the extra copies to
+`Downloads/VideoDroid/duplicates`. Nothing is deleted, and the grid hides that
+folder. The storage line now says "(device storage)" so it is not mistaken for
+library usage.
+
 ## 2.1.6 (versionCode 75)
 
 ### No more duplicate videos

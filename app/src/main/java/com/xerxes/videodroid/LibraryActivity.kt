@@ -1,6 +1,7 @@
 package com.xerxes.videodroid
 
 import android.content.ContentUris
+import android.content.ContentValues
 import com.xerxes.videodroid.ui.Insets
 import android.content.Intent
 import android.net.Uri
@@ -17,8 +18,9 @@ import android.widget.BaseAdapter
 import android.widget.GridView
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import java.io.File
 import java.util.Locale
 
 /** Finished downloads, as a thumbnail grid with a storage bar (v2). */
@@ -28,6 +30,7 @@ class LibraryActivity : AppCompatActivity() {
 
     private lateinit var grid: GridView
     private lateinit var empty: TextView
+    private var items: List<Item> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,10 +41,7 @@ class LibraryActivity : AppCompatActivity() {
         grid = findViewById(R.id.libraryGrid)
         empty = findViewById(R.id.libraryEmpty)
 
-        val items = loadItems()
-        grid.adapter = GridAdapter(items)
-        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-        grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        reload()
 
         grid.setOnItemClickListener { _, _, position, _ ->
             val item = items.getOrNull(position) ?: return@setOnItemClickListener
@@ -57,12 +57,23 @@ class LibraryActivity : AppCompatActivity() {
             true
         }
 
+        findViewById<View>(R.id.findDuplicates)?.setOnClickListener { scanDuplicates() }
+
         updateStorage()
     }
 
     override fun onResume() {
         super.onResume()
         NavHelper.sync(this, R.id.tab_library)
+        reload()
+    }
+
+    private fun reload() {
+        items = loadItems()
+        grid.adapter = GridAdapter(items)
+        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        updateStorage()
     }
 
     private fun share(uri: Uri) {
@@ -75,6 +86,72 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
+    // ---- duplicates -------------------------------------------------------------
+
+    /**
+     * Two-gate duplicate cleanup: our own dialog first, and even then nothing is deleted —
+     * the extras are **moved** to `Download/VideoDroid/duplicates`, which is reversible and
+     * hides them from this grid.
+     */
+    private fun scanDuplicates() {
+        val byId = items.associateBy { idOf(it.uri).toString() }
+        val entries = items.map { DuplicateScan.Entry(idOf(it.uri).toString(), it.name) }
+        val groups = DuplicateScan.duplicates(entries)
+
+        if (groups.isEmpty()) {
+            Toast.makeText(this, "No duplicate videos found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val extras = DuplicateScan.extras(groups)
+        val preview = groups.take(3).joinToString("\n") { g ->
+            "• " + byId[g.first().id]?.name.orEmpty().take(40) + "  (+${g.size - 1})"
+        }
+        val more = if (groups.size > 3) "\n…and ${groups.size - 3} more" else ""
+
+        AlertDialog.Builder(this)
+            .setTitle("${extras.size} duplicate${if (extras.size == 1) "" else "s"} found")
+            .setMessage(
+                "$preview$more\n\nMove the extra copies to Downloads/VideoDroid/duplicates? " +
+                    "Nothing is deleted.",
+            )
+            .setNegativeButton("Keep all", null)
+            .setPositiveButton("Move extras") { _, _ -> quarantine(extras) }
+            .show()
+    }
+
+    private fun quarantine(extras: List<DuplicateScan.Entry>) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Toast.makeText(this, "Needs Android 10 or newer", Toast.LENGTH_LONG).show()
+            return
+        }
+        var moved = 0
+        var failed = 0
+        for (e in extras) {
+            val rawId = e.id.toLongOrNull() ?: continue
+            val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, rawId)
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, DUPLICATES_RELATIVE_PATH)
+            }
+            val ok = runCatching { contentResolver.update(uri, values, null, null) > 0 }
+                .getOrDefault(false)
+            if (ok) moved++ else failed++
+        }
+        reload()
+        val msg = when {
+            moved == 0 ->
+                "Could not move any duplicates — nothing was deleted. Use Files → Downloads/VideoDroid."
+            failed == 0 -> "Moved $moved duplicate${if (moved == 1) "" else "s"} to VideoDroid/duplicates"
+            else -> "Moved $moved, could not move $failed (nothing deleted)"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    private fun idOf(uri: Uri): Long =
+        runCatching { uri.lastPathSegment?.toLongOrNull() ?: -1L }.getOrDefault(-1L)
+
+    // ---- storage / listing -------------------------------------------------------
+
     private fun updateStorage() {
         val stat = runCatching { StatFs(Environment.getExternalStorageDirectory().absolutePath) }
             .getOrNull() ?: return
@@ -84,7 +161,7 @@ class LibraryActivity : AppCompatActivity() {
         val usedPct = (((total - free).toDouble() / total) * 100).toInt().coerceIn(0, 100)
         findViewById<TextView>(R.id.storageText)?.text = String.format(
             Locale.US,
-            "%s free of %s",
+            "%s free of %s (device storage)",
             human(free),
             human(total),
         )
@@ -109,12 +186,14 @@ class LibraryActivity : AppCompatActivity() {
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.SIZE,
         )
+        // Quarantined copies live in a subfolder and must not show up here.
         val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND " +
+                "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?"
         } else {
-            "${MediaStore.MediaColumns.DATA} LIKE ?"
+            "${MediaStore.MediaColumns.DATA} LIKE ? AND ${MediaStore.MediaColumns.DATA} NOT LIKE ?"
         }
-        val args = arrayOf("%VideoDroid%")
+        val args = arrayOf("%VideoDroid%", "%duplicates%")
 
         runCatching {
             contentResolver.query(collection, projection, selection, args, "${MediaStore.MediaColumns._ID} DESC")
@@ -131,15 +210,15 @@ class LibraryActivity : AppCompatActivity() {
         return out
     }
 
-    private inner class GridAdapter(private val items: List<Item>) : BaseAdapter() {
-        override fun getCount() = items.size
-        override fun getItem(position: Int): Any = items[position]
+    private inner class GridAdapter(private val rows: List<Item>) : BaseAdapter() {
+        override fun getCount() = rows.size
+        override fun getItem(position: Int): Any = rows[position]
         override fun getItemId(position: Int) = position.toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val view = convertView ?: LayoutInflater.from(this@LibraryActivity)
                 .inflate(R.layout.item_library, parent, false)
-            val item = items[position]
+            val item = rows[position]
             val thumb = view.findViewById<ImageView>(R.id.libThumb)
             val label = view.findViewById<TextView>(R.id.libName)
 
@@ -156,5 +235,9 @@ class LibraryActivity : AppCompatActivity() {
             }
             return view
         }
+    }
+
+    private companion object {
+        const val DUPLICATES_RELATIVE_PATH = "Download/VideoDroid/duplicates"
     }
 }

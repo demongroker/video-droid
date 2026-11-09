@@ -428,6 +428,14 @@ object FormatWorker {
                 JobDiag.noteStatus("fallback path: $usedPath")
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 val info = JSONObject(result)
+                if (info.optBoolean("stale_cookies", false)) {
+                    // The cookie file was present but X rejected it, so this job ran as a guest.
+                    // Move the dead file aside (never delete it) and say so, instead of letting
+                    // it break every future download.
+                    if (XCookies.quarantine(context)) {
+                        emit("X login expired — cleared. Sign in again in Settings.")
+                    }
+                }
                 val dl = File(info.getString("path"))
                 if (!dl.exists()) return FormatResult(false, "Download produced no file")
                 src = dl
@@ -732,6 +740,9 @@ object FormatWorker {
         }
         if (s.contains("need x login")) {
             return "Need X login — Settings → Log in to X"
+        }
+        if (s.contains("x refused") || s.contains("rate limited")) {
+            return "X refused this request — post may be private, deleted or rate limited"
         }
         if (s.contains("no video in this tweet") || s.contains("no video could be found in this tweet")) {
             return if (looksLikePost) {

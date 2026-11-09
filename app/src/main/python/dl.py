@@ -57,6 +57,39 @@ class NoVideoInTweet(Exception):
     pass
 
 
+class XUnavailable(Exception):
+    """X refused the request and it is not a cookie problem (private, deleted, rate limited)."""
+    pass
+
+
+_AUTH_HINTS = (
+    "could not authenticate you",
+    "could not authenticate",
+    "auth_token",
+    "unauthorized",
+    "authentication",
+    "sign in",
+    "login required",
+    "log in",
+    "account is protected",
+    "not authorized",
+    "cookies",
+)
+
+
+def _is_auth_error(exc):
+    """True when the failure smells like a cookie that X no longer accepts.
+
+    A cookie file whose auth_token has expired makes **every** request fail
+    ("Could not authenticate you") while guest access still works for public posts, so this
+    is worth exactly one retry with the cookies removed.
+    """
+    low = str(exc).lower()
+    if "no video" in low:
+        return False
+    return any(h in low for h in _AUTH_HINTS)
+
+
 class HevcOnlyError(Exception):
     """Export path: only H.264 (avc1) is acceptable; source has none."""
 
@@ -350,18 +383,15 @@ def _twitter_fallback_info(status_id, quality):
             data = _http_json(base + status_id)
             break
         except urllib.error.HTTPError as e:
+            # A blocked or rate-limited fallback service is not a login problem; let the
+            # caller classify the real yt-dlp error instead of sending the owner to Settings.
             last_err = e
-            if e.code in (401, 403):
-                raise NeedXLogin("Need X login")
             continue
         except Exception as e:
             last_err = e
             continue
     if data is None:
-        err_s = str(last_err or "")
-        if "401" in err_s or "403" in err_s:
-            raise NeedXLogin("Need X login")
-        raise NoVideoInTweet("No video in this tweet")
+        raise XUnavailable("X fallback service unavailable")
 
     tweet = data.get("tweet") if isinstance(data, dict) else None
     if tweet is None and isinstance(data, dict) and data.get("media_extended"):
@@ -431,22 +461,29 @@ def _download_direct(url, dest_base, duration=0, width=0, height=0, title=""):
 
 
 def _classify_twitter_error(err, had_cookies):
+    """Turn an X failure into the honest reason.
+
+    Only messages that actually talk about authentication may say "Need X login" — a 401/403
+    or a protected/deleted post used to be reported as a login problem, which sent the owner
+    to the login screen for nothing (and, being permanent, the row never retried).
+    """
     msg = str(err)
     low = msg.lower()
     if "cancel" in low:
         raise _Cancelled("Cancelled")
-    loginish = any(x in low for x in (
-        "sign in", "login", "cookie", "authentication", "unauthorized",
-        "403", "401", "private", "not a bot",
+    authish = any(x in low for x in (
+        "could not authenticate", "auth_token", "cookies", "sign in", "log in",
+        "login required", "not authorized", "authentication",
     ))
-    novid = "no video" in low
-    if loginish and not novid:
+    if authish:
         raise NeedXLogin("Need X login")
-    if novid and not had_cookies:
-        # Guest GraphQL often lies "no video" for amplify/quoted; login may help.
-        raise NeedXLogin("Need X login")
-    if novid:
+    if "no video" in low:
         raise NoVideoInTweet("No video in this tweet")
+    if any(x in low for x in ("401", "403", "protected", "private", "not available",
+                              "rate limit", "429", "suspended", "withheld")):
+        raise XUnavailable(
+            "X refused this request — the post may be private, deleted, or rate limited"
+        )
     raise err
 
 
@@ -525,6 +562,8 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
     dest_base = os.path.join(outdir, filename)
     info = None
     ytdlp_err = None
+    # Set when a stale cookie file was dropped for this job (see _extract).
+    state = {"dropped_cookies": False}
 
     def _extract(format_spec):
         run_opts = dict(opts)
@@ -538,9 +577,23 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
             try:
                 with _AbortableYDL(run_opts) as ydl:
                     return ydl.extract_info(url, download=True)
-            except (_Cancelled, NeedXLogin, NoVideoInTweet):
+            except (_Cancelled, NeedXLogin, NoVideoInTweet, XUnavailable):
                 raise
             except Exception as exc:
+                if (
+                    cookie_ok
+                    and not state["dropped_cookies"]
+                    and _is_auth_error(exc)
+                ):
+                    # The cookie file exists but X no longer accepts it. Every request fails
+                    # while guest access still works for public posts, so drop the cookies for
+                    # THIS job, try once more, and tell the caller so the stale file can be
+                    # cleared instead of poisoning every future download.
+                    state["dropped_cookies"] = True
+                    run_opts.pop("cookiefile", None)
+                    _emit("X login expired — retrying without it")
+                    _check_cancel()
+                    continue
                 if _cancelled or not _is_network_error(exc):
                     raise
                 attempt += 1
@@ -629,6 +682,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
                 "width": (info or {}).get("width") or 0,
                 "height": (info or {}).get("height") or 0,
                 "title": (info or {}).get("title") or (page_title or ""),
+                "stale_cookies": state["dropped_cookies"],
             })
     if twid:
         raise NoVideoInTweet("No video in this tweet")

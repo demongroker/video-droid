@@ -64,6 +64,22 @@ object XCookies {
     }
 
     /**
+     * Move aside a cookie file X no longer accepts. Renamed, never deleted, so the owner can
+     * still inspect it and a bad file cannot break every future download.
+     */
+    fun quarantine(context: Context): Boolean = runCatching {
+        val f = file(context)
+        if (!f.isFile || f.length() <= 0L) return false
+        val dest = File(f.parentFile, "$FILE_NAME.stale")
+        if (dest.exists()) dest.delete()
+        f.renameTo(dest) || run {
+            dest.writeText(f.readText())
+            f.delete()
+            true
+        }
+    }.getOrDefault(false)
+
+    /**
      * Clear only the X / Twitter session — never the whole WebView cookie jar.
      * The old implementation called removeAllCookies(), which also wiped any
      * other site the user had signed into inside the app.
