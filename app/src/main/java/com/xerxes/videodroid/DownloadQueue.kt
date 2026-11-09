@@ -110,6 +110,9 @@ object DownloadQueue {
             .minOfOrNull { it.retryAfter } ?: 0L
     }
 
+    /** Release the claim without changing the row (used for a user cancellation). */
+    fun releaseClaim(id: String) = synchronized(lock) { claimed.remove(id) }
+
     /**
      * Record a failure. Network-shaped failures are retried with backoff
      * ([RETRY_BACKOFF_MS]) instead of being parked as permanently failed — a dropped radio
@@ -366,6 +369,11 @@ object DownloadQueue {
                         failed = o.optBoolean("failed", false),
                         failReason = o.optString("failReason", ""),
                         paused = o.optBoolean("paused", false),
+                        // Retry bookkeeping. Not persisting these was the 2.1.4 bug:
+                        // every load reset attempts to 0, so MAX_ATTEMPTS never fired
+                        // and a retryable failure re-looped every 30 s forever.
+                        attempts = o.optInt("attempts", 0),
+                        retryAfter = o.optLong("retryAfter", 0L),
                     ),
                 )
             }
@@ -414,6 +422,8 @@ object DownloadQueue {
                     put("failed", j.failed)
                     put("failReason", j.failReason)
                     put("paused", j.paused)
+                    put("attempts", j.attempts)
+                    put("retryAfter", j.retryAfter)
                 },
             )
         }

@@ -72,9 +72,44 @@ data class FormatOptions(
 private val CONVERT_LOCK = java.util.concurrent.locks.ReentrantLock()
 
 object FormatWorker {
-    private val cancelRequested = AtomicBoolean(false)
+    /**
+     * Cancel state for **per-item** stops.
+     *
+     * A job must stop when the shared "everything" flag is set (notification Cancel /
+     * Pause all) **or** when its own queue id was cancelled. Cancelling one row used to set a
+     * single global flag, which stopped every download running beside it — and each of those
+     * then recorded "Cancelled" as a permanent failure.
+     *
+     * [cancelRequested] keeps the old call shape (`get()` / `set(false)`) so the existing
+     * checks stay as they are; the job id comes from the worker thread that runs them.
+     */
+    private val cancelAll = AtomicBoolean(false)
+    private val cancelledIds = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val jobIdOfThread = ThreadLocal<String>()
+
+    private val cancelRequested = object {
+        fun get(): Boolean {
+            if (cancelAll.get()) return true
+            val id = jobIdOfThread.get() ?: return false
+            return cancelledIds.contains(id)
+        }
+
+        fun set(v: Boolean) {
+            if (v) {
+                cancelAll.set(true)
+                return
+            }
+            cancelAll.set(false)
+            jobIdOfThread.get()?.let { cancelledIds.remove(it) }
+        }
+    }
+
     /** Active FFmpeg session only — never FFmpegKit.cancel() with no id. */
     private val activeFfmpegSessionId = AtomicLong(-1L)
+
+    /** Queue item that owns the running FFmpeg session (per-item cancel must not kill it). */
+    @Volatile
+    private var activeFfmpegJobId: String? = null
 
     @Volatile
     private var activeWorkDir: File? = null
@@ -91,39 +126,67 @@ object FormatWorker {
         return File(File(context.cacheDir, "vaf"), key)
     }
 
-    fun requestCancel() {
-        cancelRequested.set(true)
-        try {
-            Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
-        } catch (_: Throwable) { }
-        cancelActiveFfmpegOnly()
-        // This item's partials are dead weight once cancelled — remove them,
-        // but give the worker a moment to unwind first. Only this item's dir.
-        val dir = activeWorkDir
-        if (dir != null) {
-            Thread {
-                try {
-                    Thread.sleep(2500)
-                } catch (_: InterruptedException) {
-                }
-                dir.deleteRecursively()
-                activeWorkDir = null
-            }.start()
-        }
-    }
+    fun requestCancel() = stopEverything(deletePartials = true)
 
     /**
      * Stop the running item but KEEP its partial files and progress, so resuming continues
      * from where it left off. This is the whole difference from [requestCancel], which
      * deletes the work directory and loses the resume point.
      */
-    fun requestPause() {
-        cancelRequested.set(true)
+    fun requestPause() = stopEverything(deletePartials = false)
+
+    /**
+     * Stop **one** item: drop its partial download and leave every other queued/downloading
+     * job untouched. An empty [id] falls back to the old stop-everything behaviour.
+     */
+    fun requestCancel(id: String, workDir: File? = null) {
+        if (id.isEmpty()) {
+            requestCancel()
+            return
+        }
+        cancelledIds.add(id)
+        cancelFfmpegFor(id)
+        if (workDir != null) deletePartialLater(workDir)
+    }
+
+    /** Stop one item and keep its partial file, so it can resume. */
+    fun requestPause(id: String) {
+        if (id.isEmpty()) {
+            requestPause()
+            return
+        }
+        cancelledIds.add(id)
+        cancelFfmpegFor(id)
+    }
+
+    private fun stopEverything(deletePartials: Boolean) {
+        cancelAll.set(true)
         try {
             Python.getInstance().getModule("dl").callAttr("set_cancelled", true)
         } catch (_: Throwable) { }
-        cancelActiveFfmpegOnly()
-        // Deliberately NOT deleting activeWorkDir — that is what makes this a pause.
+        val sid = activeFfmpegSessionId.get()
+        if (sid >= 0L) runCatching { FFmpegKit.cancel(sid) }
+        // This item's partials are dead weight once cancelled — remove them,
+        // but give the worker a moment to unwind first. Only this item's dir.
+        if (deletePartials) activeWorkDir?.let { deletePartialLater(it) }
+    }
+
+    /** Cancel the FFmpeg session only when it belongs to [id] (the encoder is shared). */
+    private fun cancelFfmpegFor(id: String) {
+        val owner = activeFfmpegJobId ?: return
+        if (owner.isEmpty() || owner != id) return
+        val sid = activeFfmpegSessionId.get()
+        if (sid >= 0L) runCatching { FFmpegKit.cancel(sid) }
+    }
+
+    private fun deletePartialLater(dir: File) {
+        Thread {
+            try {
+                Thread.sleep(2500)
+            } catch (_: InterruptedException) {
+            }
+            dir.deleteRecursively()
+        }.start()
     }
 
     private fun cancelActiveFfmpegOnly() {
@@ -143,6 +206,30 @@ object FormatWorker {
     }
 
     fun run(
+        context: Context,
+        url: String,
+        opts: FormatOptions,
+        status: (String) -> Unit,
+        localPath: String? = null,
+        id: String = "",
+    ): FormatResult {
+        // The job id lives on the worker thread, so every cancel check inside runInner
+        // belongs to this item only. Released in `finally` so a reused thread cannot
+        // inherit it.
+        jobIdOfThread.set(id)
+        return try {
+            runInner(context, url, opts, status, localPath, id)
+        } finally {
+            if (id.isNotEmpty()) cancelledIds.remove(id)
+            jobIdOfThread.remove()
+        }
+    }
+
+    /** True when this item — or everything — was asked to stop. */
+    private fun stoppedFor(id: String): Boolean =
+        cancelAll.get() || (id.isNotEmpty() && cancelledIds.contains(id))
+
+    private fun runInner(
         context: Context,
         url: String,
         opts: FormatOptions,
@@ -193,6 +280,10 @@ object FormatWorker {
                 val py = Python.getInstance()
                 val cookies = XCookies.file(context)
                 val cookiePath = if (cookies.isFile && cookies.length() > 0) cookies.absolutePath else ""
+                // Per-job stop check handed to Python: cancelling this row must not abort the
+                // other downloads. Same Java-object-with-invoke() bridge the progress callback
+                // already uses.
+                val cancelToken: () -> Boolean = { stoppedFor(id) }
                 val pollerStop = AtomicBoolean(false)
                 val poller = Thread {
                     var last = ""
@@ -220,6 +311,7 @@ object FormatWorker {
                         dlModule.callAttr(
                             "download", url, opts.dlQuality, work.absolutePath,
                             "source", cookiePath, opts.exportEnabled,
+                            null, null, null, null, false, cancelToken,
                         ).toString()
                     }
                     native.getOrElse { first ->
@@ -232,7 +324,7 @@ object FormatWorker {
                             dlModule.callAttr(
                                 "download", url, opts.dlQuality, work.absolutePath,
                                 "source", cookiePath, opts.exportEnabled,
-                                null, null, null, null, true,
+                                null, null, null, null, true, cancelToken,
                             ).toString()
                         }
                         generic.getOrElse { second ->
@@ -300,6 +392,7 @@ object FormatWorker {
                                                 "download", frame, opts.dlQuality, work.absolutePath,
                                                 "source", cookiePath, opts.exportEnabled,
                                                 null, url, PageSniffer.DESKTOP_UA, null, false,
+                                                cancelToken,
                                             ).toString()
                                         }
                                         if (r.isSuccess) {
@@ -323,6 +416,7 @@ object FormatWorker {
                                 "download", resolved.url, opts.dlQuality, work.absolutePath,
                                 "source", cookiePath, opts.exportEnabled,
                                 null, refererForDl, resolved.userAgent, resolved.title, false,
+                                cancelToken,
                             ).toString()
                         }
                     }
@@ -709,6 +803,7 @@ object FormatWorker {
             },
         )
         activeFfmpegSessionId.set(session.sessionId)
+        activeFfmpegJobId = jobIdOfThread.get()
         try {
             while (!done.await(200, TimeUnit.MILLISECONDS)) {
                 if (cancelRequested.get()) {
@@ -716,7 +811,9 @@ object FormatWorker {
                 }
             }
         } finally {
-            activeFfmpegSessionId.compareAndSet(session.sessionId, -1L)
+            if (activeFfmpegSessionId.compareAndSet(session.sessionId, -1L)) {
+                activeFfmpegJobId = null
+            }
         }
         return session
     }

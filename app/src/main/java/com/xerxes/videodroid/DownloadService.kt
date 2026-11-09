@@ -169,6 +169,11 @@ class DownloadService : Service() {
             }
             if (res.ok) {
                 DownloadQueue.finish(applicationContext, job.id)
+            } else if (res.message.equals("Cancelled", ignoreCase = true)) {
+                // A user stop is not a failure. Release the claim and leave the row as it is —
+                // paused, or already removed by the Queue screen. Recording it as failed made a
+                // cancelled download look like a permanently broken link.
+                DownloadQueue.releaseClaim(job.id)
             } else {
                 DownloadQueue.markFailure(applicationContext, job.id, res.message)
                 scheduleRetryPump()
@@ -539,7 +544,9 @@ class DownloadService : Service() {
         fun pauseOne(ctx: Context, id: String) {
             val wasRunning = DownloadQueue.isClaimed(id)
             DownloadQueue.pause(ctx, id)
-            if (wasRunning) FormatWorker.requestPause()
+            // Per-item: only this row's worker stops. The other in-flight downloads keep
+            // going — a global flag here used to fail every one of them as "Cancelled".
+            if (wasRunning) FormatWorker.requestPause(id)
         }
 
         fun resumeOne(ctx: Context, id: String) {

@@ -185,8 +185,12 @@ class QueueActivity : AppCompatActivity() {
             .setNegativeButton("Keep", null)
             .setPositiveButton(if (running) "Stop" else "Remove") { _, _ ->
                 if (running) {
-                    FormatWorker.requestCancel()
-                    DownloadService.cancel(this)
+                    // Stop **this** row only. The notification's Cancel button is the
+                    // stop-everything path; a swipe here must not kill the other downloads.
+                    FormatWorker.requestCancel(
+                        job.id,
+                        FormatWorker.partialDirFor(this, job.url, job.localPath),
+                    )
                 }
                 DownloadQueue.remove(this, job.id)
                 reload()

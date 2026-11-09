@@ -25,5 +25,10 @@ class App : PyApplication() {
                 )
             }
         }
+
+        // Re-arm a queue left behind by a killed process. download_queue.json survives, but
+        // the foreground service that was driving it does not, and nothing else would pick
+        // the work up until the next reboot or app update.
+        QueueResumeWorker.schedule(this)
     }
 }

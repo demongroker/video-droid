@@ -2,6 +2,26 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.5 (versionCode 74)
+
+### Stopping one download no longer breaks the others
+Cancel/pause was a single app-wide flag, so cancelling (or pausing) one queue row
+stopped **every** download running beside it — and each of those recorded
+"Cancelled" as a permanent failure, which is why unrelated rows turned up as
+failed. The stop request is now per item: it carries the row's id through to
+yt-dlp, only that row's FFmpeg session is cancelled, and a user cancellation is
+no longer counted as a failure at all (the row is released, not marked broken).
+
+### Retry backoff actually works
+`attempts` and `retryAfter` were never written to `download_queue.json`, so every
+read reset them to zero: the 3-attempt cap could never be reached and a network
+failure re-looped every 30 seconds indefinitely. Both fields are now persisted.
+
+### A killed process picks its queue back up
+`QueueResumeWorker` was only armed by a reboot or an app update. The application
+now schedules it on start, so a queue left behind by a killed process resumes
+without waiting for the next reboot.
+
 ## 2.1.4 (versionCode 73)
 
 ### Direct-video sites no longer fail as "HEVC-only"

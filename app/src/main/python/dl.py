@@ -20,6 +20,15 @@ _last_pct = -1
 _last_t = 0.0
 _progress_cb = None
 
+# Per-job stop check, set on the thread that runs one download. Cancelling a single queue
+# row must not abort the downloads running beside it, so the caller passes its own check
+# instead of relying on the module-global _cancelled flag.
+_job_state = threading.local()
+
+
+def _set_cancel_check(cb):
+    _job_state.cancel_check = cb
+
 _TWITTER_HOST = re.compile(
     r"(?:^|\.)(?:x\.com|twitter\.com|mobile\.twitter\.com|vxtwitter\.com|fxtwitter\.com)$",
     re.I,
@@ -55,6 +64,16 @@ class HevcOnlyError(Exception):
 def _check_cancel():
     if _cancelled:
         raise _Cancelled("Cancelled")
+    cb = getattr(_job_state, "cancel_check", None)
+    if cb is not None:
+        try:
+            stopped = cb.invoke() if hasattr(cb, "invoke") else cb()
+        except _Cancelled:
+            raise
+        except Exception:
+            stopped = False
+        if stopped:
+            raise _Cancelled("Cancelled")
 
 
 class _CancelAwareResponse:
@@ -433,7 +452,8 @@ def _classify_twitter_error(err, had_cookies):
 
 def download(url, quality, outdir, filename="source", cookiefile=None,
              export_enabled=False, progress=None, referer=None,
-             user_agent=None, page_title=None, force_generic=False):
+             user_agent=None, page_title=None, force_generic=False,
+             cancel_check=None):
     if export_enabled:
         # Export ON: H.264-REQUIRED, no any-codec fallback. The phone's ffmpeg
         # build cannot decode HEVC at all (rc=69 invalid data even in software),
@@ -451,6 +471,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
 
     global _progress_cb, _last_status, _last_pct, _last_t
     _progress_cb = progress
+    _set_cancel_check(cancel_check)
     _last_status = "Downloading..."
     _last_pct = -1
     _last_t = 0.0
