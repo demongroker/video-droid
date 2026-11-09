@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        wireClipboardBanner()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -336,7 +337,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     override fun onResume() {
         // Reading the clipboard before the window has focus is denied on
         // Android 10+ and throws on some HyperOS builds. Defer until focused.
-        window.decorView.post { if (hasWindowFocus()) runCatching { autoFillFromClipboard() } }
+        window.decorView.post { if (hasWindowFocus()) runCatching { checkClipboardBanner() } }
         super.onResume()
         NavHelper.sync(this, R.id.tab_download)
         refreshBatteryButton()
@@ -365,7 +366,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     private fun handleIncomingShare(intent: Intent?, enqueueIfBusy: Boolean) {
-        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        if (intent?.action != Intent.ACTION_SEND) return
+        // Stage 2: accept every text flavour the share sheet can send, not just text/plain.
+        val type = intent.type.orEmpty()
+        if (!type.startsWith("text/")) return
         val raw = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
         val url = firstUrl(raw)
         urlInput.setText(url)
@@ -726,6 +730,54 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     /** Offer a copied link as soon as the screen becomes visible again. */
+    // ── Stage 2: clipboard detect ────────────────────────────────────────────────
+    private var pendingClipboardUrl: String? = null
+    private var dismissedClipboardUrl: String? = null
+
+    private fun wireClipboardBanner() {
+        findViewById<Button>(R.id.clipboardBannerGo).setOnClickListener {
+            val url = pendingClipboardUrl ?: return@setOnClickListener
+            urlInput.setText(url)
+            hideClipboardBanner()
+            persistCurrent(custom = false)
+            launchJob(url)
+        }
+        findViewById<Button>(R.id.clipboardBannerClose).setOnClickListener {
+            dismissedClipboardUrl = pendingClipboardUrl
+            hideClipboardBanner()
+        }
+    }
+
+    private fun hideClipboardBanner() {
+        pendingClipboardUrl = null
+        findViewById<View>(R.id.clipboardBanner)?.visibility = View.GONE
+    }
+
+    /**
+     * Show "Download this?" when the clipboard holds a link we have not offered yet.
+     * Never auto-starts a download: the owner taps Download, so a stray clipboard URL
+     * cannot burn data on ship Wi-Fi.
+     */
+    private fun checkClipboardBanner() {
+        if (!::urlInput.isInitialized) return
+        val url = clipboardUrl()
+        if (url == null) { hideClipboardBanner(); return }
+        if (url == dismissedClipboardUrl) { hideClipboardBanner(); return }
+        if (url == urlInput.text?.toString()?.trim()) { hideClipboardBanner(); return }
+        if (!looksLikeMediaLink(url)) { hideClipboardBanner(); return }
+        val identity = MediaIdentity.canonicalUrl(url)
+        val alreadyKnown = DownloadQueue.all(this).any {
+            MediaIdentity.canonicalUrl(it.url) == identity
+        }
+        if (alreadyKnown) { hideClipboardBanner(); return }
+        pendingClipboardUrl = url
+        findViewById<TextView>(R.id.clipboardBannerText)?.text = url
+        findViewById<View>(R.id.clipboardBanner)?.visibility = View.VISIBLE
+    }
+
+    /** Cheap sanity gate; the rule itself lives in [ClipboardLink] so it can be unit tested. */
+    private fun looksLikeMediaLink(url: String): Boolean = ClipboardLink.looksDownloadable(url)
+
     private fun autoFillFromClipboard() {
         try {
             if (!::urlInput.isInitialized) return

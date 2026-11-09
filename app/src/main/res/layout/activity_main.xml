@@ -112,6 +112,69 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Stage 2: clipboard detect — explicit "Download this?" consent, no auto-start. -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/clipboardBanner"
+                style="@style/Widget.VideoDroid.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Download this?"
+                            android:textColor="@color/vd_text"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/clipboardBannerText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="middle"
+                            android:maxLines="1"
+                            android:text=""
+                            android:textColor="@color/vd_text_dim"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clipboardBannerGo"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Download"
+                        android:textAllCaps="false"
+                        android:textColor="@color/vd_violet_soft" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clipboardBannerClose"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="40dp"
+                        android:text="✕"
+                        android:textColor="@color/vd_text_dim" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- ── Download button ───────────────────────────────────── -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/goButton"
