@@ -16,3 +16,4 @@ cookies.txt
 *.cookies
 .DS_Store
 keystore.properties
+.kotlin/

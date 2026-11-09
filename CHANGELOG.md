@@ -2,6 +2,85 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.3.5 (versionCode 91)
+
+### The hardening pass before this went public
+Six real gaps, each closed with a test or a guard.
+
+- **Release build.** R8 minification plus resource shrinking, `debuggable=false`, signed with the
+  existing release key so 2.3.5 installs straight over 2.2.6. The debug APK stays for testing.
+- **Engine integrity.** The yt-dlp wheel is now checked against PyPI's published SHA-256 before it
+  is unpacked. A truncated or tampered download is discarded and the working engine is kept,
+  instead of every download breaking with an import error.
+- **Move safety.** Library "Move" compares the SHA-256 of the source and the copy after writing.
+  The original is removed only when they match — a copy that differs by one byte keeps the
+  original and deletes the copy.
+- **Delete on Android 7–10.** The confirmation dialog remains the only way in, and Android 10's
+  `RecoverableSecurityException` consent intent is now launched instead of being swallowed as a
+  silent failure.
+- **Name collisions.** Same title + date + quality no longer overwrites: `_2`, `_3` … up to `_99`,
+  then a timestamp.
+- **Shared text.** A share is validated before it reaches the queue; a share with no usable link
+  says "No video link in that share" instead of doing nothing.
+- **FLAG_SECURE everywhere.** Applied through one `SecureScreen` helper to Download, Queue,
+  Library and Settings, so content cannot appear in a screenshot or the Recents thumbnail.
+- Also: one-time background hash backfill for the existing library (capped per run, resumable),
+  Library thumbnails decoded off the UI thread, and one retry for a queue thumbnail that failed.
+
+## 2.3.4 (versionCode 90)
+
+### Stage 5 — files and engine
+- Names are `<title>_<date>_<quality>.<ext>`; X posts take the date from the status snowflake and
+  keep the short status id as the duplicate anchor.
+- Duplicate detection gained **content identity**: the finished file is hashed with SHA-256 and
+  compared against `saved_hashes.json`, so the same bytes under another name are caught even when
+  the link is different.
+- yt-dlp can be refreshed without a new APK: the latest pure-Python wheel is unpacked into the
+  app's files directory and preferred over the bundled copy, on unmetered networks, once a week.
+
+## 2.3.3 (versionCode 89)
+
+### Stage 4 — Library
+- Sort by newest / largest / name, remembered between launches.
+- Size and duration badges on every thumbnail.
+- Long-press multi-select with a contextual bar: Share (one or many), Move (copy, verify, then
+  remove the original), Delete (asks first, then the system media dialog on Android 11+).
+- Find duplicates moved next to the storage bar.
+- Privacy: FLAG_SECURE, an optional fingerprint/PIN lock for the Library, and a `.nomedia`
+  "Hide from Gallery" toggle.
+
+## 2.3.2 (versionCode 88)
+
+### Stage 3 — Queue
+- Empty state: "Paste a link to start" with a Go to Download button.
+- Every row shows a real thumbnail — the page's own preview image (`og:image`, `twitter:image`,
+  `<video poster>`) or a frame from a local file — with the media name as the headline and
+  state · quality · live speed and ETA underneath.
+- Progress bar whenever progress is known (paused and waiting included), an explicit Retry on
+  failed rows, and per-row pause / resume / cancel.
+- Foreground notification with progress; auto-resume after a dropped connection.
+
+## 2.3.1 (versionCode 87)
+
+### Stage 2 — faster input
+- Share-to-download now matches any `text/*` share. YouTube, Instagram and most browsers were
+  sending `text/html` and being ignored entirely.
+- Opening the app with a video link on the clipboard shows a "Download this?" banner. It never
+  auto-starts, stays dismissed for that link, skips links already queued, and ignores bare hosts,
+  root paths and `content://` URIs.
+
+## 2.3.0 (versionCode 86)
+
+### Stage 1 — layout cleanup
+- The Download tab is now just the link box with paste, one big Download button, the quality
+  chips and one Options button.
+- Social presets became a single sideways-scrolling chip row; the "More" list is gone.
+- Re-encode, aspect, ratio and trim live only in the Options sheet, and aspect greys out with a
+  hint until "Re-encode on device" is on.
+- New Settings screen behind a gear: simultaneous downloads, battery, X login and clearing,
+  local video, last link, recommended settings, copy log, check update, changelog — plus the
+  later privacy toggles. "Exit VideoDroid" was removed.
+
 ## 2.2.6 (versionCode 85)
 
 ### "Already in library — skipped" was refusing brand-new videos

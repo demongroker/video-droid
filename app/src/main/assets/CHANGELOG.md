@@ -2,6 +2,451 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.3.5 (versionCode 91)
+
+### The hardening pass before this went public
+Six real gaps, each closed with a test or a guard.
+
+- **Release build.** R8 minification plus resource shrinking, `debuggable=false`, signed with the
+  existing release key so 2.3.5 installs straight over 2.2.6. The debug APK stays for testing.
+- **Engine integrity.** The yt-dlp wheel is now checked against PyPI's published SHA-256 before it
+  is unpacked. A truncated or tampered download is discarded and the working engine is kept,
+  instead of every download breaking with an import error.
+- **Move safety.** Library "Move" compares the SHA-256 of the source and the copy after writing.
+  The original is removed only when they match — a copy that differs by one byte keeps the
+  original and deletes the copy.
+- **Delete on Android 7–10.** The confirmation dialog remains the only way in, and Android 10's
+  `RecoverableSecurityException` consent intent is now launched instead of being swallowed as a
+  silent failure.
+- **Name collisions.** Same title + date + quality no longer overwrites: `_2`, `_3` … up to `_99`,
+  then a timestamp.
+- **Shared text.** A share is validated before it reaches the queue; a share with no usable link
+  says "No video link in that share" instead of doing nothing.
+- **FLAG_SECURE everywhere.** Applied through one `SecureScreen` helper to Download, Queue,
+  Library and Settings, so content cannot appear in a screenshot or the Recents thumbnail.
+- Also: one-time background hash backfill for the existing library (capped per run, resumable),
+  Library thumbnails decoded off the UI thread, and one retry for a queue thumbnail that failed.
+
+## 2.3.4 (versionCode 90)
+
+### Stage 5 — files and engine
+- Names are `<title>_<date>_<quality>.<ext>`; X posts take the date from the status snowflake and
+  keep the short status id as the duplicate anchor.
+- Duplicate detection gained **content identity**: the finished file is hashed with SHA-256 and
+  compared against `saved_hashes.json`, so the same bytes under another name are caught even when
+  the link is different.
+- yt-dlp can be refreshed without a new APK: the latest pure-Python wheel is unpacked into the
+  app's files directory and preferred over the bundled copy, on unmetered networks, once a week.
+
+## 2.3.3 (versionCode 89)
+
+### Stage 4 — Library
+- Sort by newest / largest / name, remembered between launches.
+- Size and duration badges on every thumbnail.
+- Long-press multi-select with a contextual bar: Share (one or many), Move (copy, verify, then
+  remove the original), Delete (asks first, then the system media dialog on Android 11+).
+- Find duplicates moved next to the storage bar.
+- Privacy: FLAG_SECURE, an optional fingerprint/PIN lock for the Library, and a `.nomedia`
+  "Hide from Gallery" toggle.
+
+## 2.3.2 (versionCode 88)
+
+### Stage 3 — Queue
+- Empty state: "Paste a link to start" with a Go to Download button.
+- Every row shows a real thumbnail — the page's own preview image (`og:image`, `twitter:image`,
+  `<video poster>`) or a frame from a local file — with the media name as the headline and
+  state · quality · live speed and ETA underneath.
+- Progress bar whenever progress is known (paused and waiting included), an explicit Retry on
+  failed rows, and per-row pause / resume / cancel.
+- Foreground notification with progress; auto-resume after a dropped connection.
+
+## 2.3.1 (versionCode 87)
+
+### Stage 2 — faster input
+- Share-to-download now matches any `text/*` share. YouTube, Instagram and most browsers were
+  sending `text/html` and being ignored entirely.
+- Opening the app with a video link on the clipboard shows a "Download this?" banner. It never
+  auto-starts, stays dismissed for that link, skips links already queued, and ignores bare hosts,
+  root paths and `content://` URIs.
+
+## 2.3.0 (versionCode 86)
+
+### Stage 1 — layout cleanup
+- The Download tab is now just the link box with paste, one big Download button, the quality
+  chips and one Options button.
+- Social presets became a single sideways-scrolling chip row; the "More" list is gone.
+- Re-encode, aspect, ratio and trim live only in the Options sheet, and aspect greys out with a
+  hint until "Re-encode on device" is on.
+- New Settings screen behind a gear: simultaneous downloads, battery, X login and clearing,
+  local video, last link, recommended settings, copy log, check update, changelog — plus the
+  later privacy toggles. "Exit VideoDroid" was removed.
+
+## 2.2.6 (versionCode 85)
+
+### "Already in library — skipped" was refusing brand-new videos
+Reported as *"tried to download this but always crash"*. The device log showed the truth:
+`Downloaded: 425 MB` → `Already in library — skipped`, three times, ~1.3 GB burnt and nothing
+saved. The duplicate guard matched the six-digit status tag with a plain `LIKE '%<tag>%'`, so
+**any** file whose name contained those digits anywhere counted as the same video — and a
+Library full of `video_720p_Original_<timestamp>.mp4` names is full of digit runs.
+
+- Exact display-name match first, then a **segment-anchored, escaped** match
+  (`LIKE '%\_<tag>\_%' ESCAPE '\'`): `_861035_` must be its own underscore-delimited piece.
+- The `Download/VideoDroid/duplicates` folder no longer counts as "present", so moving files
+  aside with *Find duplicates* actually frees the name up.
+- For an X link the tag is known from the URL, so the check runs **before** the download
+  instead of after 425 MB.
+
+Also in this build: **2.2.4** (nothing truncated can be reported as Saved — `.part`, <1 KB,
+short versus advertised size, unreadable container) and **2.2.5** (per-job progress callback
+and per-job diagnostics, so parallel downloads stop mixing their percentages and exceptions
+in the log).
+
+## 2.2.5 (versionCode 84)
+
+### Diagnostics stop lying about which job is which
+The "Copy log" output from a real device showed one job's block containing
+`Downloading 22 %, 85 %, 23 %, 24 %` and two `Saved` lines, and an `NoVideoInTweet`
+exception attached to a block that had downloaded 425 MB successfully. Three shared statics
+were to blame, and all three are now per job:
+
+- `dl.py` wrote progress to one module-global string and each worker polled it, so with the
+  default three parallel downloads every job displayed whichever percentage was written last.
+  Progress is now a **per-job callback** handed into Python and invoked on that job's own
+  thread (same bridge the cancel check uses); the polling thread is gone. The progress
+  throttle is per job too.
+- `JobDiag` kept one ring buffer, `lastOpts`, `lastFfmpegRc` and `lastException` for every
+  worker, so blocks mixed statuses and exceptions from different downloads. Diagnostics are
+  now bound to the job id (`JobDiag.bind/unbind`), each job persists its own block, and the
+  on-screen diagnostics keep showing the latest activity.
+
+This is why the log is worth having: it caught a bug in itself.
+
+## 2.2.4 (versionCode 83)
+
+### A dropped connection can no longer masquerade as "Saved"
+Cut Wi-Fi/data mid-download and the app could report **"Saved"** for a truncated file and put
+it in the Library. The save path trusted whatever the downloader handed it and never looked at
+size or readability.
+
+Three gates now stand between a transfer and MediaStore:
+- **In Python (`dl.py`)** the produced file is verified before it is reported as a success: a
+  `.part` name, fewer than 1024 bytes, or less than 90 % of the advertised
+  `filesize`/`filesize_approx` raises `IncompleteDownload` instead of returning a path. The
+  direct-download fallback (used by the X path) also compares the bytes it read against
+  `Content-Length` — urllib ends the read quietly when the peer closes early, which is exactly
+  how a short file used to look complete.
+- **In Kotlin (`DownloadIntegrity`)** the file is checked again before any save
+  (`.part`, `< 1 KB`, short versus advertised size, and a container that FFprobe cannot read at
+  all). The same gate guards the "convert failed, keep the original" path.
+- **Reporting** says what happened — *"Download incomplete — nothing was saved (short: N of ~M
+  bytes)"* — and that message is treated as network-shaped, so the row retries with backoff
+  instead of being parked as permanently broken or silently indexed as media.
+
+## 2.2.3 (versionCode 82)
+
+### The tap artifact, actually fixed
+2.2.1 put the pill back on the visible screen inside the tab listener — but
+`NavigationBarView` applies the tapped item's check *after* that listener returns, so it
+overwrote it. The result was the frame in the recording: **Download content on screen with the
+Queue pill lit**, for as long as the transition lasted.
+
+The pill is now also re-applied on the next frame, so the visible screen keeps its own
+highlight until the next screen's `onResume` sets its id. A Robolectric test performs the same
+call path a real tap uses (`selectedItemId` → `performItemAction` → listener), idles the
+looper, and asserts both that the pill is back on the current screen **and** that navigation
+still happened — it fails on the 2.2.1 behaviour.
+
+## 2.2.2 (versionCode 81)
+
+### The ghost "Working…" screen
+With an empty queue the Download screen kept its last queue state: the status pill said
+"working", the card said "Working..." and **Cancel current** stayed lit — while the Queue tab
+correctly showed "Nothing queued". `refreshFromQueue()` simply returned the unchanged state
+when `q == 0`.
+
+Now an empty queue clears exactly the queue-derived state — busy flag, progress bar and lines
+like `Working…`, `Queued (N)`, `Starting`, `Cancelling`, `Paused`, `Stopped`, `Downloading`.
+Result and error messages (`Saved. Tap to open`, `Need X login`, `Already in library`) are
+deliberately kept readable.
+
+## 2.2.1 (versionCode 80)
+
+### Bottom bar follows the screen, every time
+This app is three activities, not a Navigation graph, so there is no `NavController` to bind
+`selected` to — the fix is the activity-level equivalent:
+- The pill is applied **immediately** and again after layout. It used to be deferred with
+  `nav.post { }`, which is the one-frame lag you could see when tapping a tab.
+- `isSaveEnabled = false` on the bar, so `BottomNavigationView` can no longer restore a stale
+  destination from instance state and fight the screen — that is how "Library content on
+  screen, Download pill highlighted" happened.
+- Tapping the tab you are already on no longer jerks the pill.
+- Library's bar was **inert** (it called only `sync()`, never installed the listener, so tab
+  taps did nothing there); `sync()` and `wire()` are now the same idempotent installer.
+
+### Find duplicates dialog: Material 3 and off the UI thread
+- Uses `MaterialAlertDialogBuilder` — the theme is `Theme.Material3.DayNight`, so the dialog
+  now matches the rest of the app instead of rendering an AppCompat/Material 2 card. The body
+  is one wrapping block that scales with the system font size.
+- "Move extras" now runs the MediaStore updates on a worker thread behind a progress dialog
+  and reports the real result, instead of a loop of `contentResolver.update()` calls on the
+  UI thread.
+- The Library grid itself is also loaded off the main thread.
+
+## 2.2.0 (versionCode 79)
+
+### A cancel that actually ends
+2.1.9 stopped the service as soon as nothing was *runnable*, but it still refused to stop
+while a worker thread was alive. A worker could be parked forever in the shared encoder's
+lock (`CONVERT_LOCK.lock()` — unbounded and cancel-blind), so after a Cancel the thread never
+exited, the service never left the foreground, and the card sat on "Cancelling…" over an
+empty queue.
+
+- The converter wait is now **cancellable and bounded**: it polls the cancel flag every
+  200 ms and aborts with "Cancelled" instead of blocking indefinitely.
+- A cancelled FFmpeg session is waited on for at most 5 s; after that the worker stops
+  waiting and reports failure rather than pinning the thread.
+- Cancel now arms a **6-second shutdown watchdog**: if nothing is runnable it stops the
+  service regardless of a wedged worker (worker threads are daemons, so nothing is lost), and
+  the `shuttingDown` flag keeps the notification from being re-posted. Any new command
+  supersedes the watchdog.
+
+## 2.1.9 (versionCode 78)
+
+### The stuck "Cancelling…" notification is gone
+The foreground service decided whether to stop with `DownloadQueue.size()`, which counts
+**failed and paused** rows. So after a Cancel (or a batch of failures) it never left the
+foreground: the app correctly showed nothing queued while the shade kept a live card frozen
+on "Cancelling…" with working Pause/Cancel buttons.
+
+- The service now stops when **nothing can actually run** — no claimed item and no waiting
+  row. Failed, paused and cancelled rows need a tap, so they no longer hold it open.
+- Cancel parks the remaining rows as paused, so nothing silently restarts afterwards, and the
+  service terminates immediately if no worker is still unwinding.
+- Shutdown is now explicit: `stopForeground(STOP_FOREGROUND_REMOVE)` **and**
+  `NotificationManager.cancel(NOTIF_ID)`, plus a `shuttingDown` flag so a per-item progress
+  update that lands late cannot re-post the card — that race is what left the notification
+  orphaned. The same cancel also runs in `onDestroy`.
+- A sticky restart (`START_STICKY` with a null intent) no longer re-creates the foreground
+  notification for a queue that only holds dead rows.
+- The notification channel itself is kept — deleting it would drop the user's per-channel
+  settings, which is a worse outcome than a stale id.
+
+## 2.1.8 (versionCode 77)
+
+### The log survives the crash
+Job diagnostics lived only in memory, so the moment the app was killed — the exact moment
+the log matters — everything was gone. Every finished job is now appended, **redacted**, to
+`filesDir/diag.log` (rotated at 64 KB), and **Copy log** includes that saved history, the
+device model and Android version, plus every queue row with its own failure reason,
+attempts and progress. No cookie, token or tokenized URL is ever written.
+
+### The header stops lying
+The status pill next to the title was a hardcoded "ready", so the app claimed everything
+was fine with a queue full of failed rows. It now reads "working", "working · N waiting",
+"N in queue — tap Queue", or "ready" — from the real queue state.
+
+## 2.1.7 (versionCode 76)
+
+### X login stops poisoning every download
+A `cookies.txt` whose `auth_token` has expired makes **every** X request fail with
+"Could not authenticate you", while guest access still works for public posts. The
+file was used whenever it was non-empty, so one stale login broke everything and
+every row was reported as "Need X login".
+- A job that fails in an authentication-shaped way now retries **once without the
+  cookies**, and the dead file is renamed to `cookies.txt.stale` (never deleted) so
+  the next job does not hit it again. You get "X login expired — cleared."
+- Only messages that actually mention authentication may say "Need X login". A
+  401/403, a protected or deleted post, or a rate limit now reads
+  *"X refused this request — post may be private, deleted or rate limited"* and is
+  treated as retryable instead of being parked as permanent.
+- A blocked FxTwitter/vxTwitter fallback is no longer reported as a login problem.
+
+### Find duplicates in the Library
+The Library header has a **Find duplicates** action. It groups videos that are the
+same media (a `_<timestamp>` collision suffix, or the same X status tag under two
+different names) and offers to move the extra copies to
+`Downloads/VideoDroid/duplicates`. Nothing is deleted, and the grid hides that
+folder. The storage line now says "(device storage)" so it is not mistaken for
+library usage.
+
+## 2.1.6 (versionCode 75)
+
+### No more duplicate videos
+Owners reported the same X video twice in the Library. Three separate causes, all fixed:
+
+- **The same post counted as a different link.** An X share link carries a `?s=09`
+  tail, and the same post arrives as `x.com/…/status/ID`, `twitter.com/…/status/ID`
+  or `x.com/i/web/status/ID`. Compared as raw strings none of those matched, so the
+  queue accepted the video twice. Links are now compared by canonical form (host
+  normalised, tracking parameters dropped, trailing slash ignored) and, for X, by
+  status id — all forms are the same row.
+- **A second paste while the first was already saved** wrote a second file with a
+  `_<timestamp>` suffix. The save stage now looks for the video first — by the
+  tweet's status tag, else by exact file name — and reports "Already in library —
+  skipped" instead of creating a copy. Nothing is ever overwritten or deleted.
+- **Downloads with no usable title** (a direct MP4 resolved by the page fallback has
+  none) were all called `video_720p_Original.mp4`, so each one after the first was
+  written as `video_720p_Original_<timestamp>.mp4`. The name now carries a short tag
+  derived from the link, so one link always produces one name.
+
+## 2.1.5 (versionCode 74)
+
+### Stopping one download no longer breaks the others
+Cancel/pause was a single app-wide flag, so cancelling (or pausing) one queue row
+stopped **every** download running beside it — and each of those recorded
+"Cancelled" as a permanent failure, which is why unrelated rows turned up as
+failed. The stop request is now per item: it carries the row's id through to
+yt-dlp, only that row's FFmpeg session is cancelled, and a user cancellation is
+no longer counted as a failure at all (the row is released, not marked broken).
+
+### Retry backoff actually works
+`attempts` and `retryAfter` were never written to `download_queue.json`, so every
+read reset them to zero: the 3-attempt cap could never be reached and a network
+failure re-looped every 30 seconds indefinitely. Both fields are now persisted.
+
+### A killed process picks its queue back up
+`QueueResumeWorker` was only armed by a reboot or an app update. The application
+now schedules it on start, so a queue left behind by a killed process resumes
+without waiting for the next reboot.
+
+## 2.1.4 (versionCode 73)
+
+### Direct-video sites no longer fail as "HEVC-only"
+With **Export on** (the default) the download asked for
+`bv*[vcodec^=avc1][height<=1080]`. That filter needs codec metadata, and a
+direct MP4 link — or anything resolved by the page fallback (LiteSpeed
+`player-x.php?q=` sites, plain `<video src>` pages, some HLS) — has none, so
+yt-dlp answered "Requested format is not available" and the app reported
+*"This video is HEVC-only"* about a perfectly ordinary H.264 file.
+
+Now that answer is treated as what it is — a metadata mismatch, not a codec
+verdict. The download retries without the codec gate (`best*/bv*+ba/b`, then no
+format filter) and only a source that *actually* reports `hevc`/`hev1`/`h265`
+is refused on the export path. Export-off behaviour is unchanged.
+
+## 2.1.3 (versionCode 72)
+
+### "Already in queue" warning actually stays visible
+Tapping Add on a link that is already queued set the warning, but a running
+download's live status stream overwrote it within a frame, so you saw nothing.
+The warning now holds for ~3 seconds against the status stream before the live
+progress text returns.
+
+## 2.1.2 (versionCode 71)
+
+### Exit VideoDroid
+A new **Exit VideoDroid** button sits in the "More" section. Tapping it really
+leaves — it stops the download service, cancels the resume worker, closes every
+activity, and kills the process, so the app is gone rather than lingering in the
+background. If a download is live it warns first: exiting stops the transfer, and
+anything still queued stays queued for next time.
+
+## 2.1.1 (versionCode 70)
+
+### Duplicate links say so out loud
+Tapping Add on a link that is already queued (live, paused, failed, or waiting out a
+retry) used to do nothing — the queue's `enqueue()` returns -1 but that runs inside a
+fire-and-forget service intent, so the owner tapped Add and saw no change. The check now
+runs in the view model *before* the intent, and the screen reads "Already in queue — that
+link is waiting. See the Queue tab."
+
+### Speed and ETA on each row
+While an item is actually transferring, its queue row now shows the live yt-dlp rate
+("2.4MiB/s · 3m 12s left") instead of only the quality tag, and the notification detail
+carries the same numbers.
+
+### Pause / Resume from the notification
+The foreground notification now carries a **Pause**/**Resume** action beside Cancel, so a
+stuck transfer can be stopped from the shade without opening the app. The label reflects
+what is actually paused right now.
+
+## 2.1.0 (versionCode 69)
+
+### Per-item pause / resume
+2.0.3 could only pause the whole queue. Each row now has its own **Pause** button that
+becomes **Resume** while paused, so one slow transfer can be stopped without touching the
+rest. A paused row reads `Paused · 40% done` instead of showing a stale percentage, and
+failed rows hide the button because there is nothing to pause.
+
+### Bounded retry with backoff
+A dropped radio used to park the item in the failed list until the owner came back and
+tapped it. Failures are now classified:
+- **network-shaped** (`no network`, `timeout`, `connection reset`, `unreachable`, …) are
+  retried at **30 s → 2 min → 10 min**, up to 3 attempts, then marked failed for real.
+- **permanent** (`profile link`, `no video`, `unsupported`, `404`, `need x login`,
+  `private`, …) fail immediately — retrying a bad URL only burns battery.
+The pump is woken at the earliest retry time, so a backed-off item is not stranded
+"Waiting" until something else happens to arrive.
+
+### Bulk actions
+The header's Clear button is now a menu: **Retry failed (N)**, **Clear failed (N)**,
+**Clear all**. The first two only appear when something has actually failed, so ten dead
+links are one tap to clear and one tap to retry once X login is sorted.
+
+## 2.0.4 (versionCode 68)
+
+### Connectivity watchdog
+- "Waiting for connection… (resumes automatically)" could hang for hours. The
+  `NetworkCallback` alone was not enough: `onLost` latched a flag and if
+  `onAvailable` never arrived (radio flap while the screen was off, doze, or the
+  callback dying with the process) nothing ever re-checked, so the queue sat
+  behind a promise the code did not keep.
+- While the network is marked lost, the radio is now re-probed every 60 s. On
+  success the flag clears, "Connection restored — resuming…" is published and the
+  pump is kicked.
+- After 5 minutes with no active network it stops pretending: publishes
+  "No connection for 5m — paused. Tap Resume all." and goes quiet.
+
+### Honest X/Twitter errors
+`mapError()` now takes the URL, so "No video in this tweet" is split into what it
+actually means:
+- pasted URL has **no** `/status/` → *"That's a profile link, not a post — open
+  the post and share its link"* (the commonest real mistake)
+- has `/status/` → *"No video in that post (or X login needed)"*
+- auth failures → *"Need X login — Settings → Log in to X"*, pointing at the
+  screen that already exists
+
+## 2.0.3 (versionCode 67)
+
+### Pause and resume
+- **Pause all / Resume all** in the queue header. The button reads
+  `Pause all`, then `Resume all (N)` showing how many items are paused.
+- Pausing **keeps the partial file and progress** — resuming continues the
+  transfer instead of restarting it. This needed a new
+  `FormatWorker.requestPause()`: the existing `requestCancel()` deliberately
+  deletes the work directory, which is right for cancel and wrong for pause.
+- Paused rows are skipped by the pump and are not counted as waiting.
+  Failed rows are left visible as failures rather than being paused.
+- `paused` is persisted in `download_queue.json`, so pausing survives a restart.
+
+### Build
+- `build.sh` now uses `./gradlew` (wrapper, Gradle 8.11.1). It previously
+  called `gradle-8.9`, which the Android plugin rejects:
+  *"Minimum supported Gradle version is 8.11.1."*
+- `build.sh` links the keystore from `~/.video-droid-signing` and reads the
+  passwords from `CREDENTIALS.txt` into env vars, so nothing is hardcoded.
+- `lintVitalRelease` is skipped by default; pass `--with-lint` to include it.
+
+## 2.0.2 (versionCode 66)
+
+### Background, resumable updates
+- Updates download in a foreground service with a status-bar notification
+  instead of a modal dialog, so leaving the app no longer kills the transfer.
+- Resumable: `Range`/`If-Range` with the stored ETag, `206` append vs `200`
+  restart, and expired GitHub asset URLs are re-resolved while keeping the
+  byte offset. Unit-tested against a local Range-capable server.
+- Downloaded APK is still signature-checked before the installer opens.
+
+### Options bottom sheet
+- The Options button now opens a real bottom sheet editing quality, export,
+  aspect mode/ratio and trim. Values are written back into the same widgets
+  and persisted through the existing path.
+
+### Queue actions
+- Queue moved to RecyclerView: swipe left cancels (with confirm), swipe right
+  shares, and failed items stay listed with their reason — tap to retry.
+
 ## 2.0.1 (versionCode 65)
 
 ### Startup crash fixed
@@ -242,7 +687,8 @@ Phase 1 — hardening, CI and size.
 
 ## 1.6.28 (versionCode 55)
 
-- **mpeg4 fallback fix**: hwaccel (`-hwaccel mediacodec`) is now structural-only for `h264_mediacodec` encode attempts. The mpeg4 fallback never receives hwaccel args — pure software decode + mpeg4 software encode works on any source. Fixes rc 69 invalid-data failure on HEVC files.
+- **mpeg4 fallback fix**: hwaccel (`-hwaccel mediacodec`) is now structural-only for `h264_mediacodec` encode attempts. The mpeg4 encoder path never receives hwaccel args — pure software decode + mpeg4 software encode works on any source the software decoder can read. Fixes rc 69 invalid-data failure on HEVC files in the mpeg4 fallback path.
+- All 1.6.26/1.6.27 features preserved: H.264-required export download, quality dropdown without best, 4-attempt encode strategy (hwaccel → software decode → software+format → mpeg4 fallback).
 
 ## 1.6.27 (versionCode 54)
 
@@ -258,16 +704,13 @@ Phase 1 — hardening, CI and size.
 
 - **Export H.264-REQUIRED**: Export downloads now use AVC-only format (`bv*[vcodec^=avc1][height<=1080]+ba/...`) with **no any-codec fallback**. If the video is HEVC-only, the download fails fast with a clear message instead of grabbing 676 MB of undecodable HEVC. Export-OFF and 1080/720/480 presets unchanged.
 
-## 1.6.24 (versionCode 51)
-
-- Fix convert producing an empty 261-byte file with rc:0 on HEVC sources (hardware decode emitted 0 frames). The encode now **validates the output** (≥1024 bytes) and, on empty/failed output, retries in order: ① hardware decode, ② software decode (no hwaccel) + h264_mediacodec, ③ software decode + `-vf format=yuv420p`. If all attempts fail, the job fails with a clear reason ("Could not decode this video on this phone. Try quality 1080 (H.264) instead of best (HEVC).") and keeps the original download — never a fake success.
-- Recommended `best` and the X preset now **prefer H.264 (avc1) sources** (`bv*[vcodec^=avc1][height<=1080]+ba/...`) so HEVC decode problems are avoided at download time. 1080/720/480 presets unchanged.
-
 ## 1.6.22 (versionCode 49)
 
 - Fix HEVC/H.265 input: encode uses **hardware decode** (`-hwaccel mediacodec -hwaccel_output_format yuv420p`) before the input file, so h264_mediacodec no longer fails with "Invalid data found when processing input" on H.265 downloads. The output pixel format is **yuv420p**, not nv12 — NV12 is not universally playable and breaks crop filters. Copy/remux path untouched, still pure stream copy.
 
-## 1.6.20 (versionCode 47)
+## 1.6.21 (versionCode 48)
+
+- Fix 1.6.20 regression: convert never started after download. Removed re-export feature (persistSource/lastSourceOrNull) which caused the encode path to stall. Local video picker and H.264-only encode unaffected.
 
 - X-safe export: Export On now encodes **H.264 (h264_mediacodec) + AAC only**. No mpeg4 fallback (X rejects MPEG-4 Part 2); if the MediaCodec encoder fails the job fails with a short reason and keeps the original.
 - Encode bitrate back to 16M / 24M (≥1080), bufsize 2× (32M / 48M). No libx264, no forced fps.
