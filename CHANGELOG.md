@@ -2,6 +2,19 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.2 (versionCode 81)
+
+### The ghost "Working…" screen
+With an empty queue the Download screen kept its last queue state: the status pill said
+"working", the card said "Working..." and **Cancel current** stayed lit — while the Queue tab
+correctly showed "Nothing queued". `refreshFromQueue()` simply returned the unchanged state
+when `q == 0`.
+
+Now an empty queue clears exactly the queue-derived state — busy flag, progress bar and lines
+like `Working…`, `Queued (N)`, `Starting`, `Cancelling`, `Paused`, `Stopped`, `Downloading`.
+Result and error messages (`Saved. Tap to open`, `Need X login`, `Already in library`) are
+deliberately kept readable.
+
 ## 2.2.1 (versionCode 80)
 
 ### Bottom bar follows the screen, every time

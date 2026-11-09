@@ -51,6 +51,35 @@ data class MainUiState(
 )
 
 /**
+ * Screen text that only makes sense while something is queued or running.
+ *
+ * `refreshFromQueue()` used to leave the state untouched when the queue was empty, so after a
+ * cancel (or a drained queue) the Download screen kept showing "Working…", a lit **Cancel
+ * current** button and a "working" status pill with nothing queued at all.
+ */
+object QueueStatusText {
+
+    private val PREFIXES = listOf(
+        "Queued (",
+        "Working...",
+        "Working…",
+        "Starting",
+        "Cancelling",
+        "Resuming",
+        "Paused",
+        "Stopped",
+        "Downloading",
+        "Waiting for connection",
+    )
+
+    fun isTransient(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty()) return false
+        return PREFIXES.any { t.startsWith(it) }
+    }
+}
+
+/**
  * Screen logic for MainActivity: job state machine, background IO and
  * DownloadService callbacks. The Activity only binds views and forwards
  * user intent here.
@@ -80,7 +109,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         statusText = if (waiting > 0) "Queued ($waiting)\nWorking..." else "Working...",
                         progressVisible = false,
                     )
-                    else -> it
+                    else -> it.copy(
+                        // An empty queue is the truth: the screen must not keep claiming
+                        // "Working..." with a lit "Cancel current" button after the queue has
+                        // drained or been cancelled. Only queue-derived lines are cleared —
+                        // a result or an error message stays readable.
+                        busy = false,
+                        queueCount = 0,
+                        waiting = 0,
+                        progressVisible = false,
+                        progressIndeterminate = false,
+                        progressPercent = null,
+                        statusText = if (QueueStatusText.isTransient(it.statusText)) "" else it.statusText,
+                    )
                 }
             }
         }
