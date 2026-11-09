@@ -2,6 +2,14 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.3 (versionCode 72)
+
+### "Already in queue" warning actually stays visible
+Tapping Add on a link that is already queued set the warning, but a running
+download's live status stream overwrote it within a frame, so you saw nothing.
+The warning now holds for ~3 seconds against the status stream before the live
+progress text returns.
+
 ## 2.1.2 (versionCode 71)
 
 ### Exit VideoDroid

@@ -46,6 +46,8 @@ data class MainUiState(
     val resultUri: Uri? = null,
     val lastFailUrl: String? = null,
     val openFailedVisible: Boolean = false,
+    /** Epoch ms until which [statusText] must not be overwritten by the live status stream. */
+    val stickyStatusUntil: Long = 0L,
 )
 
 /**
@@ -130,6 +132,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 progressVisible = false,
                 progressIndeterminate = false,
                 progressPercent = null,
+                stickyStatusUntil = 0L,
             )
         }
         viewModelScope.launch {
@@ -144,6 +147,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         busy = false,
                         statusText = "Already in queue — that link is waiting.\nSee the Queue tab.",
+                        stickyStatusUntil = System.currentTimeMillis() + 3000L,
                     )
                 }
                 return@launch
@@ -175,6 +179,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** DownloadService.Listener callback — download progress / stage text. */
     fun onServiceStatus(msg: String) {
+        // A sticky notice (e.g. "Already in queue") must hold against the live
+        // status stream, or it flashes for one frame and is overwritten the
+        // moment the running job emits its next progress line.
+        if (_state.value.stickyStatusUntil > System.currentTimeMillis()) return
         val active = msg.contains("Downloading") ||
             msg.contains("Converting") ||
             msg.contains("Trimming")
