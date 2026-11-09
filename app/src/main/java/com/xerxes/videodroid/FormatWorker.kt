@@ -485,13 +485,15 @@ object FormatWorker {
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 val ext = src.extension.ifEmpty { "mp4" }
                 val name = fileNameFor(ext)
-                savedDuplicate(context, name, url)?.let { existing ->
+                val srcHash = FileDigest.sha256(src)
+                savedDuplicate(context, name, url, srcHash)?.let { existing ->
                     if (!isPersistedSource(context, src)) src.delete()
                     emit("Already in library — skipped")
                     JobDiag.finishJob()
                     return FormatResult(true, "Already in library — skipped", existing)
                 }
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
+                SavedHashIndex.remember(context, srcHash, mediaIdOf(uri))
                 if (!isPersistedSource(context, src)) src.delete()
                 if (uri == null) return FormatResult(false, "Could not save to Downloads")
                 emit("Saved")
@@ -665,13 +667,15 @@ object FormatWorker {
                 }
                 val ext = src.extension.ifEmpty { "mp4" }
                 val name = fileNameFor(ext)
-                savedDuplicate(context, name, url)?.let { existing ->
+                val srcHash = FileDigest.sha256(src)
+                savedDuplicate(context, name, url, srcHash)?.let { existing ->
                     if (!isPersistedSource(context, src)) src.delete()
                     JobDiag.finishJob()
                     emit("Already in library — skipped")
                     return FormatResult(true, "Already in library — skipped", existing)
                 }
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
+                SavedHashIndex.remember(context, srcHash, mediaIdOf(uri))
                 val msg = if (uri != null) {
                     if (!isPersistedSource(context, src)) src.delete()
                     "Convert failed. Kept original in Downloads. $reason"
@@ -694,7 +698,8 @@ object FormatWorker {
 
             emit("Saving to phone...")
             val name = fileNameFor("mp4")
-            savedDuplicate(context, name, url)?.let { existing ->
+            val outHash = FileDigest.sha256(out)
+            savedDuplicate(context, name, url, outHash)?.let { existing ->
                 if (!isPersistedSource(context, src)) src.delete()
                 out.delete()
                 if (remux.exists()) remux.delete()
@@ -703,6 +708,7 @@ object FormatWorker {
                 return FormatResult(true, "Already in library — skipped", existing)
             }
             val uri = saveToDownloads(context, out, name)
+            SavedHashIndex.remember(context, outHash, mediaIdOf(uri))
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
             if (!isPersistedSource(context, src)) src.delete()
             out.delete(); if (remux.exists()) remux.delete()
@@ -724,6 +730,10 @@ object FormatWorker {
             }
         }
     }
+
+    /** MediaStore id from a freshly inserted row, or -1. */
+    private fun mediaIdOf(uri: Uri?): Long =
+        uri?.lastPathSegment?.toLongOrNull() ?: -1L
 
     /** True when yt-dlp has no extractor for this site. */
     private fun isUnsupportedUrl(t: Throwable): Boolean {
@@ -1086,7 +1096,6 @@ object FormatWorker {
     fun fileNameBase(opts: FormatOptions, title: String?, url: String = ""): String {
         val raw = title.orEmpty()
         val idMatch = Regex("\\[(\\d{10,25})\\]").find(raw)
-        val tail = "${qualityTag(opts)}_${aspectFileTag(opts)}"
         if (idMatch == null) {
             // not a tweet-style name: unchanged behaviour, just sanitised
             val head = shortTitle(title)
@@ -1094,7 +1103,11 @@ object FormatWorker {
             // page fallback has no title). Every such download used to be called
             // video_720p_Original.mp4, so the next one collided and was written again with a
             // timestamp suffix — a duplicate file under a different name. Tie it to the link.
-            return if (head == "video") "video_${MediaIdentity.shortTag(url)}_$tail" else "${head}_$tail"
+            // Stage 5 naming: <title>_<date>_<quality>.<ext> — the aspect tag no longer pads
+            // the name, and the day stamp keeps related downloads grouped when sorted.
+            val dateTag = todayTag()
+            val head2 = if (head == "video") "video_${MediaIdentity.shortTag(url)}" else head
+            return "${head2}_${dateTag}_${qualityTag(opts)}"
         }
         val statusId = idMatch.groupValues[1]
         val head = raw.substring(0, idMatch.range.first).trim().trimEnd('-', '_', ' ')
@@ -1103,7 +1116,18 @@ object FormatWorker {
         val text = shortTitle(parts.getOrNull(1)?.trim())
         val date = tweetDate(statusId)
         val sid = statusId.takeLast(6)
-        return listOf(account, date, sid, text).filter { it.isNotBlank() && it != "video" }.joinToString("_") + "_" + tail
+        // Stage 5 ordering: title first, then the tweet date, then the quality. The short
+        // status id stays in the name because that is what the duplicate gate anchors on.
+        val ordered = listOf(account, text, date, sid, qualityTag(opts))
+            .filter { it.isNotBlank() && it != "video" }
+            .joinToString("_")
+        return ordered
+    }
+
+    /** yyyyMMdd, local time — the date component of a file name. */
+    fun todayTag(): String {
+        val fmt = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+        return fmt.format(java.util.Date())
     }
 
     /** OPT-VIDEODROID-006: a Twitter status id is a snowflake — ms since 2010-11-04. */
@@ -1146,7 +1170,22 @@ object FormatWorker {
      *
      * Nothing is overwritten or deleted here — a duplicate is simply not created.
      */
-    private fun savedDuplicate(context: Context, name: String, url: String): Uri? {
+    private fun savedDuplicate(
+        context: Context,
+        name: String,
+        url: String,
+        fileHash: String? = null,
+    ): Uri? {
+        // Stage 5: same bytes under any name is still a duplicate. Checked before the name
+        // and link gates because it is the strongest signal we have.
+        SavedHashIndex.contains(context, fileHash)?.let { id ->
+            if (id > 0) {
+                return android.content.ContentUris.withAppendedId(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    id,
+                )
+            }
+        }
         findSaved(context, name, exact = true)?.let { return it }
         val tag = MediaIdentity.statusTag(MediaIdentity.twitterStatusId(url)) ?: return null
         // Anchored on its own underscore-delimited segment. A bare LIKE '%<tag>%' matched any

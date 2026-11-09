@@ -12,7 +12,27 @@ import time
 import urllib.error
 import urllib.request
 
-import yt_dlp
+import sys
+
+
+def _prefer_updated_engine():
+    """Stage 5: use the engine EngineUpdater unpacked into filesDir/engine, if any.
+
+    The bundled yt-dlp is frozen inside the APK, so a site change otherwise waits for a new
+    build. The runtime copy sits earlier on sys.path and is ignored entirely when absent.
+    """
+    try:
+        from com.chaquo.python import Python
+        ctx = Python.getPlatform().getApplication()
+        lib = os.path.join(str(ctx.getFilesDir()), "engine")
+        if os.path.isdir(os.path.join(lib, "yt_dlp")) and lib not in sys.path:
+            sys.path.insert(0, lib)
+    except Exception:
+        pass
+
+
+_prefer_updated_engine()
+import yt_dlp  # noqa: E402
 
 _cancelled = False
 _last_status = ""

@@ -73,7 +73,11 @@ class MediaIdentityTest {
         val b = FormatWorker.fileNameBase(opts, "", "https://porneec.com/b-page/")
 
         assertEquals("same link must always produce the same name", a, aAgain)
-        assertEquals("video_${MediaIdentity.shortTag("https://porneec.com/a-page/")}_720p_Original", a)
+        // Stage 5 naming: <title>_<date>_<quality>
+        assertEquals(
+            "video_${MediaIdentity.shortTag("https://porneec.com/a-page/")}_${FormatWorker.todayTag()}_720p",
+            a,
+        )
         assertNotEquals("two different links must not share a name", a, b)
     }
 
@@ -81,7 +85,7 @@ class MediaIdentityTest {
     fun `a tweet name carries its status tag`() {
         val name = FormatWorker.fileNameBase(opts, "AvLoveVI_-_some text-[2115818955931861035]")
         assertTrue("expected the status tag in $name", name.contains("861035"))
-        assertTrue("expected the quality tag in $name", name.endsWith("720p_Original"))
+        assertTrue("expected the quality tag in $name", name.endsWith("720p"))
     }
 
     @Test

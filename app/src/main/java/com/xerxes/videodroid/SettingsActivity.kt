@@ -16,6 +16,8 @@ import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.xerxes.videodroid.ui.Insets
 
@@ -59,6 +61,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
+
+        findViewById<Button>(R.id.engineUpdateButton).setOnClickListener { updateEngine() }
+        refreshEngineRow()
 
         findViewById<Button>(R.id.libraryLockButton).setOnClickListener { toggleLibraryLock() }
         findViewById<Button>(R.id.hideGalleryButton).setOnClickListener { toggleHideGallery() }
@@ -137,6 +142,36 @@ class SettingsActivity : AppCompatActivity() {
             .apply()
         toast("Recommended settings applied — open Download")
     }
+
+    // ---- download engine (stage 5) ---------------------------------------------------
+
+    private fun refreshEngineRow() {
+        val btn = findViewById<Button>(R.id.engineUpdateButton) ?: return
+        val v = EngineUpdater.currentVersion(this)
+        val checked = EngineUpdater.lastChecked(this)
+        btn.text = buildString {
+            append("Download engine: ")
+            append(if (v == "bundled") "bundled" else v)
+            if (checked.isNotBlank()) append(" (checked $checked)")
+        }
+    }
+
+    private fun updateEngine() {
+        val btn = findViewById<Button>(R.id.engineUpdateButton) ?: return
+        if (engineBusy) return
+        engineBusy = true
+        btn.isEnabled = false
+        btn.text = "Download engine: checking…"
+        lifecycleScope.launch {
+            val outcome = EngineUpdater.update(this@SettingsActivity)
+            engineBusy = false
+            btn.isEnabled = true
+            toast(outcome.getOrNull() ?: ("Update failed: " + (outcome.exceptionOrNull()?.message ?: "unknown")))
+            refreshEngineRow()
+        }
+    }
+
+    private var engineBusy = false
 
     // ---- privacy (stage 4) ----------------------------------------------------------
 

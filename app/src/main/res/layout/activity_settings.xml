@@ -223,6 +223,16 @@
                 android:textColor="@color/vd_text_dim" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/engineUpdateButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Update download engine"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/copyLogButton"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="match_parent"
