@@ -21,6 +21,7 @@ class App : PyApplication() {
         // survives a process death — the one moment someone actually needs it.
         JobDiag.install(this)
         runCatching { EngineUpdateWorker.schedule(this) }
+        runCatching { HashBackfillWorker.schedule(this) }
 
         if (CrashHandler.hasCrash(this)) {
             runCatching {

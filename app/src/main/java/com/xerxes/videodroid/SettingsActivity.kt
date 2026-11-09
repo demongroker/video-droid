@@ -30,6 +30,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        SecureScreen.apply(window)
         Insets.applyTo(findViewById(R.id.settingsRoot))
 
         findViewById<View>(R.id.settingsBack).setOnClickListener { finish() }

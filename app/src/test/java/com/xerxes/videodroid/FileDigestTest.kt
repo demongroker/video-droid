@@ -39,6 +39,16 @@ class FileDigestTest {
     }
 
     @Test
+    fun hashesFromAStream() {
+        // Stage 5b: move safety compares source and destination through streams.
+        val bytes = "hello".toByteArray()
+        assertEquals(
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            FileDigest.sha256(bytes.inputStream()),
+        )
+    }
+
+    @Test
     fun rejectsMissingAndEmptyFiles() {
         assertNull(FileDigest.sha256(File(tmp.root, "nope.mp4")))
         assertNull(FileDigest.sha256(tmp.newFile("empty.mp4")))

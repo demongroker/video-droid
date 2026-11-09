@@ -28,7 +28,9 @@ import java.util.concurrent.Executors
 object QueueThumb {
 
     private val cache = LruCache<String, Bitmap>(48)
-    private val failed = HashSet<String>()
+    /** Attempt count per job: a dead page is retried once, then left alone. */
+    private val attempts = HashMap<String, Int>()
+    private const val MAX_ATTEMPTS = 2
     private val pool = Executors.newSingleThreadExecutor { r ->
         Thread(r, "queue-thumb").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
     }
@@ -61,13 +63,12 @@ object QueueThumb {
         }
 
         val pageUrl = job.url
-        if (pageUrl.isBlank() || failed.contains(key)) return
+        if (pageUrl.isBlank()) return
+        if ((attempts[key] ?: 0) >= MAX_ATTEMPTS) return
+        attempts[key] = (attempts[key] ?: 0) + 1
         pool.execute {
             val poster = runCatching { posterFor(ctx, pageUrl) }.getOrNull()
-            if (poster == null) {
-                failed.add(key) // one attempt per job; a dead page is not retried on every bind
-                return@execute
-            }
+            if (poster == null) return@execute // attempts already counted; one retry max
             cache.put(key, poster)
             main.post { if (view.tag == key) view.setImageBitmap(poster) }
         }

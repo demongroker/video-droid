@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         // targetSdk 36 = enforced edge-to-edge; keep content out of the bars.
+        SecureScreen.apply(window)
         Insets.applyTo(findViewById(R.id.mainWrapper))
 
         // Settings hands the "Local video" action back here, where the picker already lives.
@@ -371,7 +372,13 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         val type = intent.type.orEmpty()
         if (!type.startsWith("text/")) return
         val raw = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
-        val url = firstUrl(raw)
+        val url = firstUrl(raw).trim()
+        // Stage 5b: a share can carry a caption, a hashtag or a bare host. Validate before
+        // touching the queue, and say so instead of silently queueing nothing.
+        if (!ClipboardLink.looksDownloadable(url)) {
+            Toast.makeText(this, "No video link in that share", Toast.LENGTH_SHORT).show()
+            return
+        }
         urlInput.setText(url)
         if (url.contains("twitter.com", ignoreCase = true) || url.contains("://x.com", ignoreCase = true) ||
             url.contains("://www.x.com", ignoreCase = true)) {

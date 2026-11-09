@@ -332,6 +332,8 @@ class LibraryActivity : AppCompatActivity() {
                 DocumentsContract.getTreeDocumentId(treeUri),
             )
             val mime = resolver.getType(item.uri) ?: "video/mp4"
+            // Hash the source first: if we cannot read it, we must not move it.
+            val sourceHash = FileDigest.sha256(resolver, item.uri) ?: return false
             val dest = DocumentsContract.createDocument(resolver, parent, mime, item.name)
                 ?: return false
             var copied = 0L
@@ -344,7 +346,15 @@ class LibraryActivity : AppCompatActivity() {
                 runCatching { DocumentsContract.deleteDocument(resolver, dest) }
                 return false
             }
-            // Verified. Only now touch the original.
+            // Stage 5b: identical bytes, not just identical length. A copy that differs by one
+            // byte is a corrupt file, and deleting the original then would lose the video.
+            val destHash = FileDigest.sha256(resolver, dest)
+            if (destHash == null || destHash != sourceHash) {
+                runCatching { DocumentsContract.deleteDocument(resolver, dest) }
+                toast("Copy did not match the original — nothing was moved")
+                return false
+            }
+            // Verified by hash. Only now touch the original.
             runCatching { resolver.delete(item.uri, null, null) }
             true
         } catch (t: Throwable) {
@@ -381,10 +391,33 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Delete for Android 7-10 (and the fallback path everywhere).
+     *
+     * Only ever reached from [confirmDeleteSelected] — the confirmation dialog is the gate,
+     * and Android 10 can still ask for its own consent through RecoverableSecurityException,
+     * so that intent is launched rather than being swallowed as a silent failure.
+     */
     private fun directDelete(uris: List<Uri>) {
         var ok = 0
+        var consent: IntentSender? = null
         uris.forEach { uri ->
-            if (runCatching { contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)) ok++
+            try {
+                if (contentResolver.delete(uri, null, null) > 0) ok++
+            } catch (se: SecurityException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val recoverable = se as? android.app.RecoverableSecurityException
+                    consent = recoverable?.userAction?.actionIntent?.intentSender ?: consent
+                }
+            } catch (t: Throwable) {
+                // Leave the row alone; the count below reports only real deletions.
+            }
+        }
+        if (consent != null) {
+            runCatching {
+                deleteRequest.launch(IntentSenderRequest.Builder(consent).build())
+            }.onFailure { toast("Android needs you to confirm this delete in Files") }
+            return
         }
         toast("Deleted $ok of ${uris.size}")
         clearSelection()
@@ -572,16 +605,8 @@ class LibraryActivity : AppCompatActivity() {
             overlay.visibility = if (isSelected) View.VISIBLE else View.GONE
             check.visibility = if (isSelected) View.VISIBLE else View.GONE
 
-            thumb.setImageDrawable(null)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                runCatching {
-                    thumb.setImageBitmap(
-                        contentResolver.loadThumbnail(item.uri, Size(256, 256), null),
-                    )
-                }.onFailure { thumb.setImageResource(R.drawable.ic_library) }
-            } else {
-                thumb.setImageResource(R.drawable.ic_library)
-            }
+            // Stage 5b: decoded on a worker thread, never in getView().
+            LibraryThumbLoader.load(this@LibraryActivity, item.uri, thumb)
             return view
         }
     }

@@ -52,13 +52,31 @@ object EngineUpdater {
                 stamp(ctx)
                 return@runCatching Result.success("Engine already up to date ($version)")
             }
-            val wheelUrl = pickWheel(meta) ?: return@runCatching Result.failure<String>(
+            val wheel = pickWheel(meta) ?: return@runCatching Result.failure<String>(
                 IllegalStateException("No pure-Python wheel published for $version"),
             )
             val zip = File(ctx.cacheDir, "yt_dlp-$version.zip")
-            if (!download(wheelUrl, zip)) return@runCatching Result.failure<String>(
+            if (!download(wheel.url, zip)) return@runCatching Result.failure<String>(
                 IllegalStateException("Download failed"),
             )
+
+            // Stage 5b: never unpack bytes we cannot tie to PyPI's own digest. A truncated or
+            // tampered wheel would replace a working engine with a broken one, and every
+            // download would fail with an import error.
+            val got = FileDigest.sha256(zip)
+            if (got == null || !got.equals(wheel.sha256, ignoreCase = true)) {
+                zip.delete()
+                JobDiag.noteStatus(
+                    "engine: digest mismatch for $version (got ${got ?: "unreadable"}, " +
+                        "expected ${wheel.sha256}) — keeping ${currentVersion(ctx)}",
+                )
+                return@runCatching Result.failure<String>(
+                    IllegalStateException(
+                        "Wheel checksum did not match PyPI — kept the current engine",
+                    ),
+                )
+            }
+            JobDiag.noteStatus("engine: digest ok for $version")
 
             val target = engineDir(ctx)
             val staging = File(ctx.cacheDir, "engine-staging")
@@ -111,8 +129,10 @@ object EngineUpdater {
         }
     }
 
+    private data class Wheel(val url: String, val sha256: String)
+
     /** Only `py3-none-any` wheels: this runs on Chaquopy's Python with no compiled parts. */
-    private fun pickWheel(meta: JSONObject): String? {
+    private fun pickWheel(meta: JSONObject): Wheel? {
         val urls = meta.optJSONArray("urls") ?: return null
         for (i in 0 until urls.length()) {
             val u = urls.optJSONObject(i) ?: continue
@@ -120,7 +140,10 @@ object EngineUpdater {
             if (!name.endsWith(".whl")) continue
             if (!name.contains("py3-none-any")) continue
             val url = u.optString("url")
-            if (url.startsWith("https://")) return url
+            val digest = u.optJSONObject("digests")?.optString("sha256").orEmpty()
+            if (!url.startsWith("https://")) continue
+            if (digest.length != 64) continue
+            return Wheel(url, digest)
         }
         return null
     }

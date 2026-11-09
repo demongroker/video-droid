@@ -43,6 +43,7 @@ class QueueActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_queue)
         Insets.applyTo(findViewById(R.id.queueRoot))
+        SecureScreen.apply(window)
         NavHelper.wire(this, R.id.tab_queue)
 
         list = findViewById(R.id.queueList)

@@ -1124,6 +1124,20 @@ object FormatWorker {
         return ordered
     }
 
+    /**
+     * `<base>.<ext>`, else `<base>_2.<ext>`, `<base>_3.<ext>` … then a timestamp past _99.
+     * Pure and injectable so the collision rule can be tested without touching a filesystem.
+     */
+    fun numberedName(base: String, ext: String, exists: (String) -> Boolean): String {
+        val plain = "$base.$ext"
+        if (!exists(plain)) return plain
+        for (i in 2..99) {
+            val numbered = "${base}_$i.$ext"
+            if (!exists(numbered)) return numbered
+        }
+        return "${base}_${System.currentTimeMillis()}.$ext"
+    }
+
     /** yyyyMMdd, local time — the date component of a file name. */
     fun todayTag(): String {
         val fmt = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
@@ -1154,8 +1168,9 @@ object FormatWorker {
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             "VideoDroid",
         )
-        val candidate = File(destDir, "$base.$ext")
-        return if (candidate.exists()) "${base}_${System.currentTimeMillis()}.$ext" else "$base.$ext"
+        // Stage 5b: same title + date + quality must never overwrite. The second copy is
+        // _2, the third _3, and so on; the timestamp is only a last resort past _99.
+        return numberedName(base, ext) { name -> File(destDir, name).exists() }
     }
 
     /** Make the name carry the tweet id even when the fallback path returned only bare text. */
