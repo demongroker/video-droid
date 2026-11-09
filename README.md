@@ -1,3 +1,5 @@
+[![CI](https://github.com/demongroker/video-droid/actions/workflows/ci.yml/badge.svg)](https://github.com/demongroker/video-droid/actions/workflows/ci.yml)
+
 # VideoDroid
 
 Phone-only Android video downloader. Paste or share a link, pick a quality, tap **Download**.
