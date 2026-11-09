@@ -2,6 +2,27 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.9 (versionCode 78)
+
+### The stuck "Cancelling…" notification is gone
+The foreground service decided whether to stop with `DownloadQueue.size()`, which counts
+**failed and paused** rows. So after a Cancel (or a batch of failures) it never left the
+foreground: the app correctly showed nothing queued while the shade kept a live card frozen
+on "Cancelling…" with working Pause/Cancel buttons.
+
+- The service now stops when **nothing can actually run** — no claimed item and no waiting
+  row. Failed, paused and cancelled rows need a tap, so they no longer hold it open.
+- Cancel parks the remaining rows as paused, so nothing silently restarts afterwards, and the
+  service terminates immediately if no worker is still unwinding.
+- Shutdown is now explicit: `stopForeground(STOP_FOREGROUND_REMOVE)` **and**
+  `NotificationManager.cancel(NOTIF_ID)`, plus a `shuttingDown` flag so a per-item progress
+  update that lands late cannot re-post the card — that race is what left the notification
+  orphaned. The same cancel also runs in `onDestroy`.
+- A sticky restart (`START_STICKY` with a null intent) no longer re-creates the foreground
+  notification for a queue that only holds dead rows.
+- The notification channel itself is kept — deleting it would drop the user's per-channel
+  settings, which is a worse outcome than a stale id.
+
 ## 2.1.8 (versionCode 77)
 
 ### The log survives the crash

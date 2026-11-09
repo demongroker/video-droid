@@ -35,6 +35,14 @@ class DownloadService : Service() {
 
     private val pumpLock = Any()
 
+    /**
+     * Set before the service removes its notification and stops itself. A worker thread that
+     * is still unwinding must not re-post the notification afterwards — that race is how the
+     * shade kept a dead "Cancelling…" card with live buttons.
+     */
+    @Volatile
+    private var shuttingDown = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -73,19 +81,29 @@ class DownloadService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        shuttingDown = true
         stopWatchingNetwork()
         releaseLocks()
+        // A notification posted with notify() (not startForeground) is not removed by the
+        // system when the service dies, so cancel it explicitly here as well.
+        runCatching { (getSystemService(NotificationManager::class.java))?.cancel(NOTIF_ID) }
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         isRunning = true
+        shuttingDown = false
         acquireLocks()
         watchNetwork()
         when (intent?.action) {
             ACTION_CANCEL -> {
                 FormatWorker.requestCancel()
-                publishGlobal("Cancelling...")
+                // Nothing may quietly restart after a Cancel. Park what is left as paused so
+                // the pump cannot re-claim it, then terminate if no worker is still unwinding
+                // — otherwise the shade keeps "Cancelling…" with live buttons forever.
+                val paused = DownloadQueue.pauseAll(applicationContext)
+                publishGlobal(ServiceLifecycle.stopMessage(paused.size))
+                maybeStopWhenIdle()
             }
             ACTION_PAUSE -> {
                 pauseAll(this)
@@ -94,6 +112,7 @@ class DownloadService : Service() {
             ACTION_RESUME -> {
                 resumeAll(this)
                 publishGlobal("Resuming...")
+                ensurePump()
             }
             ACTION_START -> {
                 val url = intent.getStringExtra(EXTRA_URL)
@@ -121,12 +140,11 @@ class DownloadService : Service() {
                 ensurePump()
             }
             else -> {
-                // Process death / sticky restart: resume remaining URLs.
-                if (DownloadQueue.size(applicationContext) > 0) ensurePump()
-                else {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf(startId)
-                }
+                // Process death / sticky restart: resume remaining work — but only if some row
+                // can actually run. Paused, failed and cancelled rows need a tap, so counting
+                // them as work re-created the foreground notification for a dead queue.
+                if (hasRunnableWork()) ensurePump()
+                else shutdownService()
             }
         }
         return START_STICKY
@@ -139,6 +157,7 @@ class DownloadService : Service() {
 
     /** Keep the pool topped up: claim work until the limit, then run it. */
     private fun ensurePump() {
+        if (shuttingDown) return
         startInForeground(composeNotif(lastJobLine, summaryLine()))
         synchronized(pumpLock) {
             val limit = maxParallel()
@@ -190,15 +209,38 @@ class DownloadService : Service() {
         }
     }
 
+    /** Anything left that could still run on its own? */
+    private fun hasRunnableWork(): Boolean {
+        if (DownloadQueue.inFlightIds().isNotEmpty()) return true
+        return DownloadQueue.waiting(applicationContext) > 0
+    }
+
     private fun maybeStopWhenIdle() {
         synchronized(pumpLock) {
             if (workerThreads.isNotEmpty()) return
-            if (DownloadQueue.size(applicationContext) > 0) return
-            DownloadQueue.releaseAllClaims()
-            liveStatus.clear()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            val inFlight = DownloadQueue.inFlightIds().size
+            val waiting = DownloadQueue.waiting(applicationContext)
+            if (!ServiceLifecycle.shouldStop(inFlight, waiting)) return
+            shutdownService()
         }
+    }
+
+    /**
+     * Leave the foreground **and** remove the notification, then stop.
+     *
+     * `stopForeground(STOP_FOREGROUND_REMOVE)` alone is not enough: the notification is also
+     * re-posted through `NotificationManager.notify()` for per-item progress, and a notify that
+     * lands after the removal resurrects it — that is the card that outlived the queue. So the
+     * flag goes up first, and the id is cancelled explicitly. The notification *channel* is
+     * deliberately left in place: deleting it would drop the user's per-channel settings.
+     */
+    private fun shutdownService() {
+        shuttingDown = true
+        DownloadQueue.releaseAllClaims()
+        liveStatus.clear()
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        runCatching { (getSystemService(NotificationManager::class.java))?.cancel(NOTIF_ID) }
+        stopSelf()
     }
 
     private fun summaryLine(): String {
@@ -396,6 +438,7 @@ class DownloadService : Service() {
 
 
     private fun startInForeground(msg: String) {
+        if (shuttingDown) return
         ensureChannel()
         val n = buildNotification(msg)
         if (Build.VERSION.SDK_INT >= 34) {
@@ -406,6 +449,8 @@ class DownloadService : Service() {
     }
 
     private fun updateNotification(msg: String) {
+        // A per-item progress update that lands after shutdown must not resurrect the card.
+        if (shuttingDown) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIF_ID, buildNotification(msg))
     }
