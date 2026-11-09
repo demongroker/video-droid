@@ -39,10 +39,12 @@ object NavHelper {
                 R.id.tab_library -> LibraryActivity::class.java
                 else -> return@setOnItemSelectedListener false
             }
-            // Snap the pill back to this screen at once: the next screen's onResume sets its
-            // own. Without this the tapped tab stays highlighted during the transition while
-            // this screen is still the visible one.
+            // Snap the pill back to this screen: the next screen's onResume sets its own.
+            // Two passes, because NavigationBarView applies the tapped item's check *after*
+            // this listener returns — the in-call apply alone is overwritten by it, which is
+            // exactly the "Download content with the Queue pill lit" frame in the recording.
             apply(nav, selected)
+            nav.post { apply(nav, selected) }
             activity.startActivity(
                 Intent(activity, target).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             )

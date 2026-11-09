@@ -4,6 +4,7 @@ import android.app.Application
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -56,6 +57,37 @@ class BottomNavSyncTest {
             "sync must apply immediately, not a frame later",
             R.id.tab_queue,
             nav.selectedItemId,
+        )
+        c.pause().stop().destroy()
+    }
+
+    /**
+     * The frame captured in the recording: Download content still on screen with the **Queue**
+     * pill lit. NavigationBarView checks the tapped item *after* the listener returns, so the
+     * pill must be put back on the visible screen on the next frame; the next screen's own
+     * onResume then sets its id.
+     */
+    @Test
+    fun `tapping another tab restores this screen's pill and still navigates`() {
+        val c = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = c.get()
+        val nav = navOf(activity)
+        assertNotNull(nav.menu.findItem(R.id.tab_queue))
+
+        // Same path the bar uses for a real tap: selectedItemId -> performItemAction ->
+        // our OnItemSelectedListener.
+        nav.selectedItemId = R.id.tab_queue
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+        assertEquals(
+            "the visible screen must keep its own pill",
+            R.id.tab_download,
+            nav.selectedItemId,
+        )
+        assertEquals(
+            "…and the tap must still navigate",
+            QueueActivity::class.java.name,
+            org.robolectric.Shadows.shadowOf(activity).nextStartedActivity?.component?.className,
         )
         c.pause().stop().destroy()
     }

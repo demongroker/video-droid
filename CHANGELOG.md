@@ -2,6 +2,20 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.3 (versionCode 82)
+
+### The tap artifact, actually fixed
+2.2.1 put the pill back on the visible screen inside the tab listener — but
+`NavigationBarView` applies the tapped item's check *after* that listener returns, so it
+overwrote it. The result was the frame in the recording: **Download content on screen with the
+Queue pill lit**, for as long as the transition lasted.
+
+The pill is now also re-applied on the next frame, so the visible screen keeps its own
+highlight until the next screen's `onResume` sets its id. A Robolectric test performs the same
+call path a real tap uses (`selectedItemId` → `performItemAction` → listener), idles the
+looper, and asserts both that the pill is back on the current screen **and** that navigation
+still happened — it fails on the 2.2.1 behaviour.
+
 ## 2.2.2 (versionCode 81)
 
 ### The ghost "Working…" screen
