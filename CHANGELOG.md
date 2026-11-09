@@ -2,6 +2,26 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.5 (versionCode 84)
+
+### Diagnostics stop lying about which job is which
+The "Copy log" output from a real device showed one job's block containing
+`Downloading 22 %, 85 %, 23 %, 24 %` and two `Saved` lines, and an `NoVideoInTweet`
+exception attached to a block that had downloaded 425 MB successfully. Three shared statics
+were to blame, and all three are now per job:
+
+- `dl.py` wrote progress to one module-global string and each worker polled it, so with the
+  default three parallel downloads every job displayed whichever percentage was written last.
+  Progress is now a **per-job callback** handed into Python and invoked on that job's own
+  thread (same bridge the cancel check uses); the polling thread is gone. The progress
+  throttle is per job too.
+- `JobDiag` kept one ring buffer, `lastOpts`, `lastFfmpegRc` and `lastException` for every
+  worker, so blocks mixed statuses and exceptions from different downloads. Diagnostics are
+  now bound to the job id (`JobDiag.bind/unbind`), each job persists its own block, and the
+  on-screen diagnostics keep showing the latest activity.
+
+This is why the log is worth having: it caught a bug in itself.
+
 ## 2.2.4 (versionCode 83)
 
 ### A dropped connection can no longer masquerade as "Saved"

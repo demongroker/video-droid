@@ -62,4 +62,31 @@ class JobDiagHistoryTest {
         assertTrue(block, block.contains("Invalid data"))
         assertTrue("unknown duration must say so, not 0s", block.contains("duration: not reached"))
     }
+
+    @Test
+    fun `parallel jobs do not mix their statuses or exceptions`() {
+        JobDiag.install(ctx)
+
+        JobDiag.bind("job-a")
+        JobDiag.beginJob(opts())
+        JobDiag.noteStatus("Downloading 10%")
+        JobDiag.noteException("NoVideoInTweet: No video in this tweet")
+        JobDiag.finishJob()
+        JobDiag.unbind()
+
+        JobDiag.bind("job-b")
+        JobDiag.beginJob(opts())
+        JobDiag.noteStatus("Downloading 90%")
+        JobDiag.finishJob()
+        JobDiag.unbind()
+
+        val saved = JobDiag.history(ctx, 100_000)
+        val blocks = saved.split("=== ").filter { it.isNotBlank() }
+        val a = blocks.last { it.contains("Downloading 10%") }
+        val b = blocks.last { it.contains("Downloading 90%") }
+
+        assertFalse("job A's block must not contain job B's progress", a.contains("Downloading 90%"))
+        assertFalse("job B's block must not carry job A's exception", b.contains("NoVideoInTweet"))
+        assertTrue("job A keeps its own exception", a.contains("NoVideoInTweet"))
+    }
 }

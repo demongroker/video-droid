@@ -218,11 +218,14 @@ object FormatWorker {
         // belongs to this item only. Released in `finally` so a reused thread cannot
         // inherit it.
         jobIdOfThread.set(id)
+        // Per-job diagnostics: parallel downloads must not mix their statuses or exceptions.
+        JobDiag.bind(id)
         return try {
             runInner(context, url, opts, status, localPath, id)
         } finally {
             if (id.isNotEmpty()) cancelledIds.remove(id)
             jobIdOfThread.remove()
+            JobDiag.unbind()
         }
     }
 
@@ -287,26 +290,11 @@ object FormatWorker {
                 // other downloads. Same Java-object-with-invoke() bridge the progress callback
                 // already uses.
                 val cancelToken: () -> Boolean = { stoppedFor(id) }
-                val pollerStop = AtomicBoolean(false)
-                val poller = Thread {
-                    var last = ""
-                    while (!pollerStop.get() && !cancelRequested.get()) {
-                        try {
-                            val s = py.getModule("dl").callAttr("get_status").toString()
-                            if (s.isNotEmpty() && s != last) {
-                                last = s
-                                emit(s)
-                            }
-                        } catch (_: Throwable) { }
-                        try {
-                            Thread.sleep(400)
-                        } catch (_: InterruptedException) {
-                            break
-                        }
-                    }
-                }
-                poller.isDaemon = true
-                poller.start()
+                // Per-job progress sink. The old design polled a module-global status string,
+                // so with parallel downloads one job's percentages were shown on another
+                // (device log: 22 %, 85 %, 23 %, 24 % inside a single job). The callback is
+                // handed to Python, which calls it on this job's own thread.
+                val progressCb: (String) -> Unit = { msg -> emit(msg) }
                 val dlModule = py.getModule("dl")
                 var usedPath = "native"
                 val result = try {
@@ -314,7 +302,7 @@ object FormatWorker {
                         dlModule.callAttr(
                             "download", url, opts.dlQuality, work.absolutePath,
                             "source", cookiePath, opts.exportEnabled,
-                            null, null, null, null, false, cancelToken,
+                            progressCb, null, null, null, false, cancelToken,
                         ).toString()
                     }
                     native.getOrElse { first ->
@@ -327,7 +315,7 @@ object FormatWorker {
                             dlModule.callAttr(
                                 "download", url, opts.dlQuality, work.absolutePath,
                                 "source", cookiePath, opts.exportEnabled,
-                                null, null, null, null, true, cancelToken,
+                                progressCb, null, null, null, true, cancelToken,
                             ).toString()
                         }
                         generic.getOrElse { second ->
@@ -394,7 +382,7 @@ object FormatWorker {
                                             dlModule.callAttr(
                                                 "download", frame, opts.dlQuality, work.absolutePath,
                                                 "source", cookiePath, opts.exportEnabled,
-                                                null, url, PageSniffer.DESKTOP_UA, null, false,
+                                                progressCb, url, PageSniffer.DESKTOP_UA, null, false,
                                                 cancelToken,
                                             ).toString()
                                         }
@@ -418,14 +406,13 @@ object FormatWorker {
                             dlModule.callAttr(
                                 "download", resolved.url, opts.dlQuality, work.absolutePath,
                                 "source", cookiePath, opts.exportEnabled,
-                                null, refererForDl, resolved.userAgent, resolved.title, false,
+                                progressCb, refererForDl, resolved.userAgent, resolved.title, false,
                                 cancelToken,
                             ).toString()
                         }
                     }
                 } finally {
-                    pollerStop.set(true)
-                    poller.interrupt()
+                    // Statuses are delivered by progressCb (per job) — nothing to drain here.
                 }
                 JobDiag.noteStatus("fallback path: $usedPath")
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")

@@ -29,6 +29,17 @@ _job_state = threading.local()
 def _set_cancel_check(cb):
     _job_state.cancel_check = cb
 
+
+def _set_progress_cb(cb):
+    """Per-job progress sink.
+
+    `_progress_cb` is a module global, and downloads run in parallel: with three jobs in
+    flight every job's percentages were written to the same slot and each poller read
+    whichever job had written last — the log from a real device showed 22 %, 85 %, 23 %, 24 %
+    interleaved inside one job. The callback belongs to the job's own thread.
+    """
+    _job_state.progress_cb = cb
+
 _TWITTER_HOST = re.compile(
     r"(?:^|\.)(?:x\.com|twitter\.com|mobile\.twitter\.com|vxtwitter\.com|fxtwitter\.com)$",
     re.I,
@@ -236,7 +247,7 @@ class _AbortableYDL(yt_dlp.YoutubeDL):
 def _emit(text):
     global _last_status
     _last_status = text
-    cb = _progress_cb
+    cb = getattr(_job_state, "progress_cb", None) or _progress_cb
     if cb is None:
         return
     try:
@@ -321,22 +332,24 @@ def _hook_status_line(d):
 
 
 def _hook(d):
-    global _last_pct, _last_t
     _check_cancel()
     if d.get("status") != "downloading":
         return
     text, pct = _hook_status_line(d)
     now = time.monotonic()
+    # Throttle per job: a shared last_pct/last_t let one download suppress another's updates.
+    last_pct = getattr(_job_state, "last_pct", -1)
+    last_t = getattr(_job_state, "last_t", 0.0)
     if pct is not None:
-        if pct < _last_pct + 2 and (now - _last_t) < 0.5 and pct < 100:
+        if pct < last_pct + 2 and (now - last_t) < 0.5 and pct < 100:
             return
-        _last_pct = pct
-        _last_t = now
+        _job_state.last_pct = pct
+        _job_state.last_t = now
         _emit(text)
         return
-    if (now - _last_t) < 0.5 and _last_status.startswith("Downloading"):
+    if (now - last_t) < 0.5 and _last_status.startswith("Downloading"):
         return
-    _last_t = now
+    _job_state.last_t = now
     _emit(text)
 
 
@@ -556,6 +569,7 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
 
     global _progress_cb, _last_status, _last_pct, _last_t
     _progress_cb = progress
+    _set_progress_cb(progress)
     _set_cancel_check(cancel_check)
     _last_status = "Downloading..."
     _last_pct = -1

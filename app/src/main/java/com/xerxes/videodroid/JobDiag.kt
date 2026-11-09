@@ -24,6 +24,41 @@ object JobDiag {
     private val ring = ArrayDeque<String>(RING)
     private var lastFinished: List<String> = emptyList()
 
+    /**
+     * Per-job rings. `ring` above is shared, and downloads run in parallel: a real device log
+     * mixed two jobs into one block (`22 %, 85 %, 23 %, 24 %` with two different `Saved`
+     * lines), which makes the file useless for the purpose it exists. The shared ring is kept
+     * only so the on-screen diagnostics can show the latest activity.
+     */
+    private val jobRings = java.util.concurrent.ConcurrentHashMap<String, ArrayDeque<String>>()
+    private val boundId = ThreadLocal<String>()
+
+    /** Per-job copy of the fields the statuses alone do not carry. */
+    private class Meta {
+        @Volatile var opts: FormatOptions? = null
+        @Volatile var ffmpegRc: String = ""
+        @Volatile var ffmpegTail: String = ""
+        @Volatile var exception: String = ""
+        @Volatile var durKnown: Boolean? = null
+        @Volatile var durValue: Double = 0.0
+    }
+
+    private val jobMeta = java.util.concurrent.ConcurrentHashMap<String, Meta>()
+
+    private fun meta(): Meta? =
+        boundId.get()?.let { jobMeta.computeIfAbsent(it) { Meta() } }
+
+    /** Attach this thread to a job id; call from the worker thread before anything else. */
+    fun bind(id: String) {
+        boundId.set(id)
+        jobRings.computeIfAbsent(id) { ArrayDeque(RING) }
+        jobMeta.computeIfAbsent(id) { Meta() }
+    }
+
+    fun unbind() {
+        boundId.remove()
+    }
+
     @Volatile
     private var app: Context? = null
 
@@ -44,6 +79,7 @@ object JobDiag {
         synchronized(lock) {
             if (ring.isNotEmpty()) lastFinished = ring.toList()
             ring.clear()
+            boundId.get()?.let { id -> jobRings.computeIfAbsent(id) { ArrayDeque(RING) }.clear() }
         }
         lastFfmpegRc = ""
         lastFfmpegTail = ""
@@ -52,6 +88,14 @@ object JobDiag {
         durationValue = 0.0
         lastOpts = opts
         lastStatusLine = ""
+        meta()?.let {
+            it.opts = opts
+            it.ffmpegRc = ""
+            it.ffmpegTail = ""
+            it.exception = ""
+            it.durKnown = null
+            it.durValue = 0.0
+        }
     }
 
     fun noteStatus(raw: String) {
@@ -59,24 +103,43 @@ object JobDiag {
         if (s.isEmpty()) return
         lastStatusLine = s
         synchronized(lock) {
-            if (ring.isNotEmpty() && ring.last() == s) return
-            if (ring.size >= RING) ring.removeFirst()
-            ring.addLast(s)
+            if (ring.isNotEmpty() && ring.last() == s) {
+                // still record it for this job's own block
+            } else {
+                if (ring.size >= RING) ring.removeFirst()
+                ring.addLast(s)
+            }
+            boundId.get()?.let { id ->
+                val r = jobRings.computeIfAbsent(id) { ArrayDeque(RING) }
+                if (r.isEmpty() || r.last() != s) {
+                    if (r.size >= RING) r.removeFirst()
+                    r.addLast(s)
+                }
+            }
         }
     }
 
     fun noteFfmpeg(rc: String, output: String?) {
         lastFfmpegRc = rc
         lastFfmpegTail = redact((output ?: "").takeLast(400))
+        meta()?.let {
+            it.ffmpegRc = rc
+            it.ffmpegTail = lastFfmpegTail
+        }
     }
 
     fun noteException(msg: String?) {
         lastException = redact(msg ?: "")
+        meta()?.exception = lastException
     }
 
     fun noteDuration(known: Boolean, value: Double) {
         durationKnown = known
         durationValue = value
+        meta()?.let {
+            it.durKnown = known
+            it.durValue = value
+        }
     }
 
     fun finishJob() {
@@ -84,6 +147,10 @@ object JobDiag {
             if (ring.isNotEmpty()) lastFinished = ring.toList()
         }
         persistSnapshot()
+        boundId.get()?.let {
+            jobRings.remove(it)
+            jobMeta.remove(it)
+        }
     }
 
     fun lastStatuses(n: Int = 30): List<String> {
@@ -113,11 +180,17 @@ object JobDiag {
 
     /** The block written for the job that just ended. */
     fun snapshotBlock(): String {
-        val opts = lastOpts
-        val statuses = synchronized(lock) {
+        val m = meta()
+        val opts = m?.opts ?: lastOpts
+        val rc = m?.ffmpegRc ?: lastFfmpegRc
+        val tail = m?.ffmpegTail ?: lastFfmpegTail
+        val exc = m?.exception ?: lastException
+        val durKnown = m?.durKnown ?: durationKnown
+        val durValue = if (m != null) m.durValue else durationValue
+        val statuses = boundId.get()?.let { id -> jobRings[id]?.toList() } ?: synchronized(lock) {
             if (ring.isNotEmpty()) ring.toList() else lastFinished
         }
-        if (statuses.isEmpty() && lastException.isEmpty() && lastFfmpegRc.isEmpty()) return ""
+        if (statuses.isEmpty() && exc.isEmpty() && rc.isEmpty()) return ""
         val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())
         val sb = StringBuilder()
         sb.append("=== ").append(stamp).append('\n')
@@ -126,15 +199,15 @@ object JobDiag {
                 .append(" export=").append(opts.exportEnabled).append('\n')
         }
         sb.append("duration: ").append(
-            when (durationKnown) {
-                true -> "${durationValue}s"
+            when (durKnown) {
+                true -> "${durValue}s"
                 false -> "unknown (probe found none)"
                 null -> "not reached"
             },
         ).append('\n')
-        sb.append("ffmpeg rc: ").append(lastFfmpegRc.ifEmpty { "(none)" }).append('\n')
-        if (lastFfmpegTail.isNotBlank()) sb.append("ffmpeg tail: ").append(lastFfmpegTail).append('\n')
-        sb.append("exception: ").append(lastException.ifEmpty { "(none)" }).append('\n')
+        sb.append("ffmpeg rc: ").append(rc.ifEmpty { "(none)" }).append('\n')
+        if (tail.isNotBlank()) sb.append("ffmpeg tail: ").append(tail).append('\n')
+        sb.append("exception: ").append(exc.ifEmpty { "(none)" }).append('\n')
         for (line in statuses.takeLast(30)) sb.append("  ").append(line).append('\n')
         return sb.toString()
     }
