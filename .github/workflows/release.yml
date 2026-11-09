@@ -165,21 +165,23 @@ jobs:
 
       # Hard gate: the wrong certificate silently breaks the in-app updater, so a
       # mismatch fails the build instead of being printed and ignored.
+      # Hard gate: the wrong certificate silently breaks the in-app updater, so a
+      # mismatch fails the build instead of being printed and ignored.
+      # Text parsing of `--print-certs` proved brittle across build-tools versions,
+      # so this asserts the expected fingerprint is present rather than reformatting it.
       - name: Verify signing certificate fingerprint
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -euo pipefail
           BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
           APK="dist/VideoDroid-${{ steps.ver.outputs.version }}.apk"
-          CERT=$("$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK" \
-            | awk -F': ' '/certificate SHA-256 digest/{print $2; exit}' \
-            | tr -d ' \r' | tr 'A-F' 'a-f')
-          echo "APK certificate SHA-256: $CERT"
-          if [ "$CERT" != "$EXPECTED_CERT_SHA256" ]; then
-            echo "::error::APK is signed with $CERT but the app only updates from $EXPECTED_CERT_SHA256"
+          CERTS=$("$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK")
+          echo "$CERTS"
+          if ! printf '%s' "$CERTS" | tr 'A-F' 'a-f' | grep -qF "$EXPECTED_CERT_SHA256"; then
+            echo "::error::APK is not signed with $EXPECTED_CERT_SHA256 — the in-app updater would reject it."
             exit 1
           fi
-          echo "Certificate matches the release identity."
+          echo "Certificate matches the release identity ($EXPECTED_CERT_SHA256)."
 
       - name: Upload artifact
         if: startsWith(github.ref, 'refs/tags/')
