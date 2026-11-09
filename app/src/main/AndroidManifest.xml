@@ -38,6 +38,10 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings" />
+        <activity
             android:name=".XLoginActivity"
             android:exported="false"
             android:label="Login X" />

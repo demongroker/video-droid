@@ -105,6 +105,16 @@
                 android:text="Fit" />
         </com.google.android.material.chip.ChipGroup>
 
+        <TextView
+            android:id="@+id/optAspectHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Turn on “Re-encode on device” to change the aspect"
+            android:textColor="@color/vd_text_dim"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/optRatio"
             android:layout_width="match_parent"

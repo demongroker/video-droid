@@ -52,9 +52,20 @@
                     android:id="@+id/statePill"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
                     android:text="ready"
                     android:textColor="@color/vd_text_dim"
                     android:textSize="12sp" />
+
+                <ImageButton
+                    android:id="@+id/settingsButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Settings"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/vd_text_dim" />
             </LinearLayout>
 
             <!-- ── Paste / URL bar ───────────────────────────────────── -->
@@ -141,8 +152,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                app:singleSelection="true"
-                app:selectionRequired="true">
+                app:selectionRequired="true"
+                app:singleSelection="true">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/q4k"
@@ -282,120 +293,88 @@
                 app:cornerRadius="16dp"
                 app:strokeColor="@color/vd_outline" />
 
-            <!-- Hidden host for the advanced controls moved into the sheet. -->
+            <!--
+                Social presets: one sideways-scrolling row of chips (Stage 1). No toggle, no
+                "More" section — everything advanced lives in the Options sheet and Settings.
+            -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/presetsExpanded"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetX"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="X" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetTikTok"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TikTok" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetShorts"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Shorts" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetReels"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Reels" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetInstagram"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Instagram" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetYouTube"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="YouTube" />
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/presetFacebook"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Facebook" />
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
+            <!--
+                Hidden host: the re-encode / aspect / trim state still lives here so the
+                Options sheet and the saved preferences keep one source of truth, but none of
+                it is visible on the Download screen any more (Stage 1).
+            -->
             <LinearLayout
                 android:id="@+id/exportOptions"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="gone" />
-
-            <!-- ── Presets (collapsed) ───────────────────────────────── -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/presetsToggle"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="Presets"
-                android:textAllCaps="false"
-                android:textColor="@color/vd_text_dim" />
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/presetsExpanded"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:visibility="gone">
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetX"
-                    style="@style/Widget.Material3.Chip.Assist"
+                <android.widget.Switch
+                    android:id="@+id/exportSwitch"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="X" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetTikTok"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="TikTok" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetShorts"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Shorts" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetReels"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Reels" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetInstagram"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Instagram" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetYouTube"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="YouTube" />
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/presetFacebook"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Facebook" />
-            </com.google.android.material.chip.ChipGroup>
+                    android:layout_height="wrap_content" />
 
-            <!-- ── More (collapsed) ──────────────────────────────────── -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/moreToggle"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="More"
-                android:textAllCaps="false"
-                android:textColor="@color/vd_text_dim" />
-
-            <LinearLayout
-                android:id="@+id/moreSection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <!-- Export -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Convert for social"
-                        android:textColor="@color/vd_text"
-                        android:textSize="14sp" />
-
-                    <android.widget.Switch
-                        android:id="@+id/exportSwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-                </LinearLayout>
-
-                <!-- Aspect -->
                 <LinearLayout
                     android:id="@+id/aspectRatioRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
                     android:orientation="horizontal">
 
                     <Spinner
@@ -408,219 +387,47 @@
                         android:id="@+id/aspectRatio"
                         android:layout_width="0dp"
                         android:layout_height="48dp"
-                        android:layout_marginStart="8dp"
                         android:layout_weight="1" />
                 </LinearLayout>
 
-                <!-- Trim -->
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <android.widget.Switch
+                    android:id="@+id/trimSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/trimOnOff"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Trim"
-                        android:textColor="@color/vd_text"
-                        android:textSize="14sp" />
-
-                    <android.widget.Switch
-                        android:id="@+id/trimSwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
-
-                    <TextView
-                        android:id="@+id/trimOnOff"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text=""
-                        android:textColor="@color/vd_text_dim"
-                        android:textSize="12sp" />
-                </LinearLayout>
+                    android:text="" />
 
                 <LinearLayout
                     android:id="@+id/trimFields"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
+                    android:orientation="horizontal">
 
                     <EditText
                         android:id="@+id/trimStart"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:hint="0:00"
-                        android:inputType="text"
-                        android:textColor="@color/vd_text"
-                        android:textColorHint="@color/vd_text_dim" />
+                        android:inputType="text" />
 
                     <EditText
                         android:id="@+id/trimEnd"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
                         android:layout_weight="1"
-                        android:hint="end"
-                        android:inputType="text"
-                        android:textColor="@color/vd_text"
-                        android:textColorHint="@color/vd_text_dim" />
+                        android:inputType="text" />
                 </LinearLayout>
-
-                <!-- Parallel downloads -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Simultaneous downloads"
-                        android:textColor="@color/vd_text"
-                        android:textSize="14sp" />
-
-                    <Spinner
-                        android:id="@+id/parallelSpinner"
-                        android:layout_width="wrap_content"
-                        android:layout_height="48dp" />
-                </LinearLayout>
-
-                <!-- Battery -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/batteryButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Battery"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <!-- Sources -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/localButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Local video"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/openPageButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
                     android:text="Open page"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/myLastButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="My last link"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/recommendedButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Recommended settings"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <!-- Account -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/loginXButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Log in to X"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/clearLoginButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Clear login"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <!-- Library -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/libraryButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Library"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <!-- Diagnostics -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/copyLogButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Copy log"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/checkUpdateButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Check update"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/changelogButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="Changelog"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_text_dim" />
-
-                <!-- Exit: stops the service and kills the process, so the app is
-                     actually gone rather than sitting in the background. -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/exitButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="start|center_vertical"
-                    android:text="Exit VideoDroid"
-                    android:textAllCaps="false"
-                    android:textColor="@color/vd_danger" />
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

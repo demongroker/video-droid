@@ -120,6 +120,24 @@ class OptionsSheetFragment : BottomSheetDialogFragment() {
         }
         ratioGroup?.visibility = if (mode == "Original") View.GONE else View.VISIBLE
 
+        // Stage 1: aspect only means something when the file is re-encoded on the device.
+        // Grey the whole block out instead of letting the owner set a value that is ignored.
+        val exportSwitch = view.findViewById<MaterialSwitch>(R.id.optExport)
+        fun applyExportGating(on: Boolean) {
+            listOfNotNull<View>(
+                modeGroup,
+                ratioGroup,
+                view.findViewById<View>(R.id.optRatio),
+            ).forEach {
+                it.isEnabled = on
+                it.alpha = if (on) 1f else 0.4f
+            }
+            view.findViewById<View>(R.id.optAspectHint)?.visibility =
+                if (on) View.GONE else View.VISIBLE
+        }
+        applyExportGating(exportSwitch.isChecked)
+        exportSwitch.setOnCheckedChangeListener { _, on -> applyExportGating(on) }
+
         view.findViewById<MaterialButton>(R.id.optReset).setOnClickListener {
             selectChipAt(qGroup, QUALITIES.indexOf("1080p"))
             view.findViewById<MaterialSwitch>(R.id.optExport).isChecked = true

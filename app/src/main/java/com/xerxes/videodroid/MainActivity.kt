@@ -49,11 +49,8 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
 
     private lateinit var urlInput: EditText
     private lateinit var dlQuality: Spinner
-    private lateinit var localButton: Button
     private lateinit var exportSwitch: Switch
     private lateinit var exportOptions: LinearLayout
-    private lateinit var moreSection: LinearLayout
-    private lateinit var moreToggle: TextView
     private lateinit var aspectMode: Spinner
     private lateinit var aspectRatio: Spinner
     private lateinit var aspectRatioRow: LinearLayout
@@ -69,7 +66,6 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     private lateinit var jobCard: com.google.android.material.card.MaterialCardView
     private lateinit var status: TextView
     private lateinit var statePill: TextView
-    private lateinit var presetsToggle: MaterialButton
     private lateinit var presetsExpanded: ChipGroup
     private var pendingStart = false
     private var suppressPersist = false
@@ -89,13 +85,16 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         // targetSdk 36 = enforced edge-to-edge; keep content out of the bars.
         Insets.applyTo(findViewById(R.id.mainWrapper))
 
+        // Settings hands the "Local video" action back here, where the picker already lives.
+        if (intent?.getBooleanExtra(EXTRA_PICK_LOCAL, false) == true) {
+            intent.removeExtra(EXTRA_PICK_LOCAL)
+            findViewById<View>(R.id.mainWrapper).post { runCatching { pickLocalVideo() } }
+        }
+
         urlInput = findViewById(R.id.urlInput)
         dlQuality = findViewById(R.id.dlQuality)
-        localButton = findViewById(R.id.localButton)
         exportSwitch = findViewById(R.id.exportSwitch)
         exportOptions = findViewById(R.id.exportOptions)
-        moreSection = findViewById(R.id.moreSection)
-        moreToggle = findViewById(R.id.moreToggle)
         aspectMode = findViewById(R.id.aspectMode)
         aspectRatio = findViewById(R.id.aspectRatio)
         aspectRatioRow = findViewById(R.id.aspectRatioRow)
@@ -111,11 +110,13 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         jobCard = findViewById(R.id.jobCard)
         status = findViewById(R.id.status)
         statePill = findViewById(R.id.statePill)
-        presetsToggle = findViewById(R.id.presetsToggle)
         presetsExpanded = findViewById(R.id.presetsExpanded)
         hideJobProgress()
-        collapsePresets()
         NavHelper.wire(this, R.id.tab_download)
+
+        findViewById<View>(R.id.settingsButton).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -123,24 +124,6 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             }
         }
 
-        findViewById<Button>(R.id.loginXButton).setOnClickListener {
-            startActivity(Intent(this, XLoginActivity::class.java))
-        }
-        findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
-            XCookies.clear(this)
-            statusText = "X login cleared"
-        }
-        findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
-        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener { checkUpdateNow() }
-        findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
-        findViewById<Button>(R.id.exitButton).setOnClickListener { confirmExit() }
-        setupParallelSpinner()
-        findViewById<Button>(R.id.batteryButton).setOnClickListener { toggleBatteryOptimisation() }
-        refreshBatteryButton()
-        findViewById<Button>(R.id.libraryButton).setOnClickListener {
-            collapsePresets()
-            startActivity(Intent(this, LibraryActivity::class.java))
-        }
         findViewById<Chip>(R.id.presetX).setOnClickListener {
             applySocialPreset("X", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Portrait 9:16")
         }
@@ -162,16 +145,6 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         findViewById<Chip>(R.id.presetFacebook).setOnClickListener {
             applySocialPreset("Facebook", exportOn = true, quality = "1080p", mode = "Fit", ratio = "Landscape 16:9")
         }
-        presetsToggle.setOnClickListener { expandPresets() }
-        wirePresetCollapse()
-
-        moreToggle.setOnClickListener {
-            collapsePresets()
-            val open = moreSection.visibility != View.VISIBLE
-            moreSection.visibility = if (open) View.VISIBLE else View.GONE
-            moreToggle.text = if (open) "More ▾" else "More ▸"
-        }
-
         fun spinner(s: Spinner, values: Array<String>) {
             ArrayAdapter(this, R.layout.spinner_item, values).also {
                 it.setDropDownViewResource(R.layout.spinner_dropdown_item)
@@ -241,25 +214,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         aspectRatio.onItemSelectedListener = persistListener
         runCatching { wireV2Controls() }
 
-        findViewById<Button>(R.id.recommendedButton).setOnClickListener {
-            collapsePresets()
-            applyRecommended()
-        }
-        findViewById<Button>(R.id.myLastButton).setOnClickListener {
-            collapsePresets()
-            applyMyLast()
-        }
-
         goButton.setOnClickListener {
-            collapsePresets()
             start()
         }
-        localButton.setOnClickListener {
-            collapsePresets()
-            pickLocalVideo()
-        }
         cancelButton.setOnClickListener {
-            collapsePresets()
             cancelJob()
         }
         openPageButton.setOnClickListener {
@@ -397,6 +355,11 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_PICK_LOCAL, false)) {
+            intent.removeExtra(EXTRA_PICK_LOCAL)
+            runCatching { pickLocalVideo() }
+            return
+        }
         setIntent(intent)
         handleIncomingShare(intent, enqueueIfBusy = true)
     }
@@ -794,60 +757,12 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     }
 
     private fun expandPresets() {
-        presetsExpanded.visibility = View.VISIBLE
-        presetsToggle.text = "Social presets ▾"
+        // Stage 1: the preset row is always visible; nothing to expand.
     }
 
     private fun collapsePresets() {
-        presetsExpanded.visibility = View.GONE
-        presetsToggle.text = "Social presets"
-    }
-
-    private fun presetsAreExpanded(): Boolean = presetsExpanded.visibility == View.VISIBLE
-
-    private fun isTouchInside(view: View, ev: MotionEvent): Boolean {
-        val loc = IntArray(2)
-        view.getLocationOnScreen(loc)
-        val x = ev.rawX
-        val y = ev.rawY
-        return x >= loc[0] && x <= loc[0] + view.width && y >= loc[1] && y <= loc[1] + view.height
-    }
-
-    private fun wirePresetCollapse() {
-        val scroll = findViewById<ScrollView>(R.id.mainScroll)
-        val root = findViewById<View>(R.id.mainRoot)
-        val interceptor = View.OnTouchListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_DOWN && presetsAreExpanded()) {
-                if (!isTouchInside(presetsToggle, ev) && !isTouchInside(presetsExpanded, ev)) {
-                    collapsePresets()
-                }
-            }
-            false
-        }
-        scroll.setOnTouchListener(interceptor)
-        root.setOnTouchListener(interceptor)
-        root.setOnClickListener { collapsePresets() }
-        findViewById<Button>(R.id.loginXButton).setOnClickListener {
-            collapsePresets()
-            startActivity(Intent(this, XLoginActivity::class.java))
-        }
-        findViewById<Button>(R.id.clearLoginButton).setOnClickListener {
-            collapsePresets()
-            XCookies.clear(this)
-            statusText = "X login cleared"
-        }
-        findViewById<Button>(R.id.copyLogButton).setOnClickListener {
-            collapsePresets()
-            copyLog()
-        }
-        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
-            collapsePresets()
-            checkUpdateNow()
-        }
-        findViewById<Button>(R.id.changelogButton).setOnClickListener {
-            collapsePresets()
-            showChangelog()
-        }
+        // Stage 1: no collapsed preset row and no "More" list any more — kept as a no-op so
+        // the existing call sites stay harmless and self-documenting.
     }
 
     private fun showChangelog() {
@@ -1093,6 +1008,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
 
     companion object {
         private const val PREFS = "videodroid"
+        const val EXTRA_PICK_LOCAL = "pick_local"
         private const val KEY_QUALITY = "last_quality"
         private const val KEY_EXPORT_ON = "export_on"
         private const val KEY_ASPECT_MODE = "last_aspect_mode"
