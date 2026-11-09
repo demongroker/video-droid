@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     private lateinit var jobProgress: LinearProgressIndicator
     private lateinit var jobCard: com.google.android.material.card.MaterialCardView
     private lateinit var status: TextView
+    private lateinit var statePill: TextView
     private lateinit var presetsToggle: MaterialButton
     private lateinit var presetsExpanded: ChipGroup
     private var pendingStart = false
@@ -109,6 +110,7 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         jobProgress = findViewById(R.id.jobProgress)
         jobCard = findViewById(R.id.jobCard)
         status = findViewById(R.id.status)
+        statePill = findViewById(R.id.statePill)
         presetsToggle = findViewById(R.id.presetsToggle)
         presetsExpanded = findViewById(R.id.presetsExpanded)
         hideJobProgress()
@@ -923,6 +925,17 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
     /** Single place that pushes ViewModel state into the widgets. */
     private fun render(s: MainUiState) {
         if (status.text?.toString() != s.statusText) status.text = s.statusText
+        // "ready" used to be a hardcoded label, so the header claimed everything was fine
+        // even with a queue full of failed rows. Say what is actually true.
+        val label = when {
+            s.progressVisible && s.waiting > 0 -> "working · ${s.waiting} waiting"
+            s.progressVisible -> "working"
+            s.busy && s.waiting > 0 -> "working · ${s.waiting} waiting"
+            s.busy -> "working"
+            s.queueCount > 0 -> "${s.queueCount} in queue — tap Queue"
+            else -> "ready"
+        }
+        if (statePill.text?.toString() != label) statePill.text = label
         jobCard.visibility =
             if (s.statusText.isNotEmpty() || s.progressVisible) View.VISIBLE else View.GONE
         goButton.isEnabled = true
@@ -1032,6 +1045,33 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         lines.add("")
         lines.add("last exception: ${JobDiag.lastException.ifEmpty { "(none)" }}")
         lines.add(durLine)
+        lines.add("")
+        lines.add(
+            "device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · " +
+                "Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
+        )
+        // Per-row reasons: the Diagnostics view showed only the *current* job, so after a
+        // restart every failed row's reason was invisible.
+        val rows = DownloadQueue.all(this)
+        if (rows.isNotEmpty()) {
+            lines.add("")
+            lines.add("queue rows (${rows.size}):")
+            for (j in rows.take(25)) {
+                val what = MediaIdentity.canonicalUrl(j.url) ?: j.localPath.takeLast(60)
+                lines.add(
+                    "- $what | failed=${j.failed} paused=${j.paused} " +
+                        "attempts=${j.attempts} progress=${j.progress}% | " +
+                        j.failReason.ifEmpty { "-" },
+                )
+            }
+        }
+        // Persisted history survives a process death; the ring buffer above does not.
+        val saved = JobDiag.history(this, 6000)
+        if (saved.isNotBlank()) {
+            lines.add("")
+            lines.add("saved job log (filesDir/diag.log):")
+            lines.add(saved)
+        }
         val blob = JobDiag.redact(lines.joinToString("\n"))
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("videodroid-log", blob))

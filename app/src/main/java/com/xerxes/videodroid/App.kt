@@ -17,6 +17,10 @@ class App : PyApplication() {
         // the stack trace instead of just "keeps stopping".
         CrashHandler.install(this)
 
+        // Finished job diagnostics are written to filesDir/diag.log (redacted) so the log
+        // survives a process death — the one moment someone actually needs it.
+        JobDiag.install(this)
+
         if (CrashHandler.hasCrash(this)) {
             runCatching {
                 startActivity(

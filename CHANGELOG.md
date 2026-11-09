@@ -2,6 +2,20 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.8 (versionCode 77)
+
+### The log survives the crash
+Job diagnostics lived only in memory, so the moment the app was killed — the exact moment
+the log matters — everything was gone. Every finished job is now appended, **redacted**, to
+`filesDir/diag.log` (rotated at 64 KB), and **Copy log** includes that saved history, the
+device model and Android version, plus every queue row with its own failure reason,
+attempts and progress. No cookie, token or tokenized URL is ever written.
+
+### The header stops lying
+The status pill next to the title was a hardcoded "ready", so the app claimed everything
+was fine with a queue full of failed rows. It now reads "working", "working · N waiting",
+"N in queue — tap Queue", or "ready" — from the real queue state.
+
 ## 2.1.7 (versionCode 76)
 
 ### X login stops poisoning every download

@@ -49,6 +49,7 @@
                     android:background="@drawable/dot_emerald" />
 
                 <TextView
+                    android:id="@+id/statePill"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="ready"
