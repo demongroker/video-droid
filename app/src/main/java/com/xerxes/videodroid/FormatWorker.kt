@@ -273,6 +273,20 @@ object FormatWorker {
             var expectedBytes = 0L
 
             val picked = if (!localPath.isNullOrBlank()) File(localPath) else null
+            if (picked == null || !picked.exists()) {
+                // An X post's status tag is known from the link, so a duplicate can be refused
+                // BEFORE downloading it. The log showed the same 425 MB video downloaded three
+                // times and thrown away each time because the save stage rejected it.
+                val earlyTag = MediaIdentity.statusTag(MediaIdentity.twitterStatusId(url))
+                val earlyPattern = MediaIdentity.tagLikePattern(earlyTag)
+                if (earlyPattern != null) {
+                    findSavedLike(context, earlyPattern)?.let { existing ->
+                        emit("Already in library — skipped")
+                        JobDiag.finishJob()
+                        return FormatResult(true, "Already in library — skipped", existing)
+                    }
+                }
+            }
             if (picked != null && picked.exists()) {
                 src = picked
                 title = picked.nameWithoutExtension
@@ -1133,16 +1147,34 @@ object FormatWorker {
      * Nothing is overwritten or deleted here — a duplicate is simply not created.
      */
     private fun savedDuplicate(context: Context, name: String, url: String): Uri? {
-        val tag = MediaIdentity.statusTag(MediaIdentity.twitterStatusId(url))
-        if (tag != null) findSaved(context, "%$tag%", exact = false)?.let { return it }
-        return findSaved(context, name, exact = true)
+        findSaved(context, name, exact = true)?.let { return it }
+        val tag = MediaIdentity.statusTag(MediaIdentity.twitterStatusId(url)) ?: return null
+        // Anchored on its own underscore-delimited segment. A bare LIKE '%<tag>%' matched any
+        // file whose name happened to contain those six digits anywhere, so a brand-new
+        // download was rejected as "Already in library — skipped" — the user's report was
+        // "always crashes", and the log showed 425 MB downloaded and thrown away.
+        return findSavedLike(context, MediaIdentity.tagLikePattern(tag) ?: return null)
     }
 
-    /** Look a saved download up by display name, inside the app's own Downloads folder. */
-    private fun findSaved(context: Context, pattern: String, exact: Boolean): Uri? {
+    /** Exact display-name lookup inside the app's own Downloads folder. */
+    private fun findSaved(context: Context, name: String, exact: Boolean): Uri? {
+        if (exact) return findSavedLike(context, name, exactMatch = true)
+        return findSavedLike(context, name)
+    }
+
+    /**
+     * @param pattern display name (exact) or a LIKE pattern; LIKE patterns use `\` to escape
+     *                `_`, which would otherwise match any single character
+     */
+    private fun findSavedLike(
+        context: Context,
+        pattern: String,
+        exactMatch: Boolean = false,
+    ): Uri? {
         if (Build.VERSION.SDK_INT >= 29) {
             val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} ${if (exact) "=" else "LIKE"} ?" +
+            val op = if (exactMatch) "=" else "LIKE ? ESCAPE '\\'"
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} $op" +
                 " AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
             val args = arrayOf(pattern, "%VideoDroid%")
             runCatching {
@@ -1164,12 +1196,12 @@ object FormatWorker {
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             "VideoDroid",
         )
-        val hit = if (exact) {
-            File(dir, pattern)
-        } else {
-            val needle = pattern.trim('%')
-            dir.listFiles()?.firstOrNull { it.name.contains(needle) }
+        if (exactMatch) {
+            val f = File(dir, pattern)
+            return if (f.isFile && f.length() > 0) Uri.fromFile(f) else null
         }
+        val needle = "_" + pattern.trim('%').trim('\\', '_') + "_"
+        val hit = dir.listFiles()?.firstOrNull { it.name.contains(needle) }
         return if (hit != null && hit.isFile && hit.length() > 0) Uri.fromFile(hit) else null
     }
 

@@ -73,6 +73,16 @@ object MediaIdentity {
     fun statusTag(statusId: String?): String? =
         statusId?.takeLast(6)?.takeIf { it.length == 6 }
 
+    /**
+     * SQL LIKE pattern that only matches the tag as its own underscore-delimited segment.
+     *
+     * `%<tag>%` matched any file whose name contained those six digits anywhere, which made a
+     * fresh download look like a duplicate ("Already in library — skipped") after the bytes had
+     * already been downloaded. `_` is a single-character wildcard in LIKE, hence the escapes.
+     */
+    fun tagLikePattern(tag: String?): String? =
+        tag?.takeIf { it.length == 6 }?.let { "%\\_$it\\_%" }
+
     /** True when both links point at the same media. */
     fun sameMedia(a: String?, b: String?): Boolean {
         val ca = canonicalUrl(a) ?: return false

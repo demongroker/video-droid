@@ -56,11 +56,14 @@ class MediaIdentityTest {
     }
 
     @Test
-    fun `status id and tag come out of any link form`() {
+    fun `status tag and tag pattern come out of any link form`() {
         val id = MediaIdentity.twitterStatusId("https://twitter.com/u/status/2115818955931861035?s=09")
         assertEquals("2115818955931861035", id)
         assertEquals("861035", MediaIdentity.statusTag(id))
         assertNull(MediaIdentity.twitterStatusId("https://porneec.com/whatever/"))
+        // Anchored: `_` is a LIKE wildcard, so it must be escaped or any 6 characters match.
+        assertEquals("%\\_861035\\_%", MediaIdentity.tagLikePattern("861035"))
+        assertNull(MediaIdentity.tagLikePattern("123"))
     }
 
     @Test
