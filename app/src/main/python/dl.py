@@ -94,6 +94,45 @@ class HevcOnlyError(Exception):
     """Export path: only H.264 (avc1) is acceptable; source has none."""
 
 
+class IncompleteDownload(Exception):
+    """The transfer ended early — a truncated file must never be reported as saved."""
+    pass
+
+
+def _verify_downloaded(path, info):
+    """Reject a partial/short file before it can be handed to the app as a success.
+
+    yt-dlp verifies Content-Length itself, but our own direct-download fallback and any
+    close-delimited body it accepts do not, and the Kotlin save path used to trust the path
+    blindly. Cutting the connection mid-transfer therefore produced "Saved" over a truncated
+    file.
+    """
+    if not path or not os.path.isfile(path):
+        raise FileNotFoundError("no file produced for %s" % path)
+    base = os.path.basename(path)
+    if base.endswith(".part") or ".part." in base:
+        raise IncompleteDownload("Download incomplete (partial file)")
+    size = os.path.getsize(path)
+    if size < 1024:
+        raise IncompleteDownload("Download incomplete (only %d bytes)" % size)
+    exp = 0
+    if isinstance(info, dict):
+        exp = info.get("filesize") or info.get("filesize_approx") or 0
+        if not exp:
+            for f in (info.get("requested_formats") or []):
+                if isinstance(f, dict):
+                    exp += (f.get("filesize") or f.get("filesize_approx") or 0)
+    try:
+        exp = int(exp)
+    except (TypeError, ValueError):
+        exp = 0
+    if exp > 0 and size * 10 < exp * 9:
+        raise IncompleteDownload(
+            "Download incomplete (%d of ~%d bytes) — the connection dropped" % (size, exp)
+        )
+    return size, exp
+
+
 def _check_cancel():
     if _cancelled:
         raise _Cancelled("Cancelled")
@@ -451,12 +490,21 @@ def _download_direct(url, dest_base, duration=0, width=0, height=0, title=""):
                 _emit("Downloading %d%%" % min(100, int(got * 100.0 / total)))
     if not os.path.isfile(dest) or os.path.getsize(dest) < 64:
         raise FileNotFoundError("no file produced")
+    # urllib happily ends the read when the peer closes early; with a Content-Length that is
+    # a truncated file, not a finished download.
+    got = os.path.getsize(dest)
+    if total > 0 and got < total:
+        raise IncompleteDownload(
+            "Download incomplete (%d of %d bytes) — the connection dropped" % (got, total)
+        )
     return {
         "path": dest,
         "duration": duration or 0,
         "width": width or 0,
         "height": height or 0,
         "title": title or "",
+        "size": got,
+        "expected": total,
     }
 
 
@@ -676,12 +724,17 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
     _check_cancel()
     for f in sorted(os.listdir(outdir)):
         if f.startswith(filename + "."):
+            dest = os.path.join(outdir, f)
+            # Never report a truncated or partial file as a success.
+            size, expected = _verify_downloaded(dest, info)
             return json.dumps({
-                "path": os.path.join(outdir, f),
+                "path": dest,
                 "duration": (info or {}).get("duration") or 0,
                 "width": (info or {}).get("width") or 0,
                 "height": (info or {}).get("height") or 0,
                 "title": (info or {}).get("title") or (page_title or ""),
+                "size": size,
+                "expected": expected,
                 "stale_cookies": state["dropped_cookies"],
             })
     if twid:

@@ -266,6 +266,8 @@ object FormatWorker {
             var width: Int
             var height: Int
             var duration: Double
+            /** Size the site advertised, so a short transfer can be detected later. */
+            var expectedBytes = 0L
 
             val picked = if (!localPath.isNullOrBlank()) File(localPath) else null
             if (picked != null && picked.exists()) {
@@ -443,7 +445,28 @@ object FormatWorker {
                 width = info.getInt("width")
                 height = info.getInt("height")
                 duration = info.optDouble("duration", 0.0)
+                expectedBytes = info.optLong("expected", 0L)
                 emit("Downloaded: ${src.length() / 1024 / 1024} MB")
+                // Integrity gate: a transfer that ended early must never reach MediaStore as
+                // "Saved". Cut the network mid-download and yt-dlp *usually* errors — but the
+                // direct-download fallback can end cleanly on a short body, and the save path
+                // used to trust the path blindly.
+                run {
+                    val probed = if (width > 0 || height > 0 || duration > 0.0) {
+                        Triple(width, height, duration)
+                    } else {
+                        probeVideo(src)
+                    }
+                    val why = DownloadIntegrity.rejection(
+                        src.name, src.length(), expectedBytes,
+                        probed.first, probed.second, probed.third,
+                    ) ?: return@run
+                    JobDiag.noteStatus("integrity: $why (${src.length()} bytes)")
+                    val msg = DownloadIntegrity.failureMessage(why)
+                    emit(msg)
+                    JobDiag.finishJob()
+                    return FormatResult(false, msg)
+                }
             }
 
             // ---- duplicate guard -------------------------------------------------------
@@ -625,6 +648,20 @@ object FormatWorker {
             fun keepDownloaded(reason: String): FormatResult {
                 if (out.exists()) out.delete()
                 if (remux.exists()) remux.delete()
+                // Saving a truncated source because the convert failed just moves the problem
+                // into the Library.
+                run {
+                    val probed = probeVideo(src)
+                    val why = DownloadIntegrity.rejection(
+                        src.name, src.length(), expectedBytes,
+                        probed.first, probed.second, probed.third,
+                    ) ?: return@run
+                    JobDiag.noteStatus("integrity(keep): $why")
+                    val msg = DownloadIntegrity.failureMessage(why)
+                    emit(msg)
+                    JobDiag.finishJob()
+                    return FormatResult(false, msg)
+                }
                 val ext = src.extension.ifEmpty { "mp4" }
                 val name = fileNameFor(ext)
                 savedDuplicate(context, name, url)?.let { existing ->
@@ -719,6 +756,9 @@ object FormatWorker {
         if (s.contains("cancel")) return "Cancelled"
         if (s.contains("no downloadable video")) {
             return "No downloadable video found on this page"
+        }
+        if (s.contains("incomplete")) {
+            return "Download incomplete — the connection dropped. Nothing was saved."
         }
         if (s.contains("unsupported url") || s.contains("unsupported site")) {
             return "Unsupported site. Open page."

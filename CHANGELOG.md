@@ -2,6 +2,27 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.4 (versionCode 83)
+
+### A dropped connection can no longer masquerade as "Saved"
+Cut Wi-Fi/data mid-download and the app could report **"Saved"** for a truncated file and put
+it in the Library. The save path trusted whatever the downloader handed it and never looked at
+size or readability.
+
+Three gates now stand between a transfer and MediaStore:
+- **In Python (`dl.py`)** the produced file is verified before it is reported as a success: a
+  `.part` name, fewer than 1024 bytes, or less than 90 % of the advertised
+  `filesize`/`filesize_approx` raises `IncompleteDownload` instead of returning a path. The
+  direct-download fallback (used by the X path) also compares the bytes it read against
+  `Content-Length` — urllib ends the read quietly when the peer closes early, which is exactly
+  how a short file used to look complete.
+- **In Kotlin (`DownloadIntegrity`)** the file is checked again before any save
+  (`.part`, `< 1 KB`, short versus advertised size, and a container that FFprobe cannot read at
+  all). The same gate guards the "convert failed, keep the original" path.
+- **Reporting** says what happened — *"Download incomplete — nothing was saved (short: N of ~M
+  bytes)"* — and that message is treated as network-shaped, so the row retries with backoff
+  instead of being parked as permanently broken or silently indexed as media.
+
 ## 2.2.3 (versionCode 82)
 
 ### The tap artifact, actually fixed

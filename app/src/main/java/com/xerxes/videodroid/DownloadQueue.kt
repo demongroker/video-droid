@@ -171,7 +171,7 @@ object DownloadQueue {
         val transient = listOf(
             "no network", "timeout", "timed out", "connection", "reset",
             "unreachable", "enotconn", "econnrefused", "offline", "network",
-            "rate limit", "x refused",
+            "rate limit", "x refused", "incomplete", "connection dropped",
         )
         return transient.any { s.contains(it) }
     }
