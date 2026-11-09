@@ -129,8 +129,11 @@ class OptionsAndQueueLaunchTest {
 
         val holder = list.findViewHolderForAdapterPosition(0)
         assertNotNull("no row bound", holder)
+        // Stage 3: the headline is the media name, and the state line carries the failure.
         val title = holder!!.itemView.findViewById<TextView>(R.id.queueRowTitle).text.toString()
-        assertTrue("row should show the failure: $title", title.startsWith("Failed"))
+        val sub = holder.itemView.findViewById<TextView>(R.id.queueRowSub).text.toString()
+        assertTrue("row should show the failure: $title / $sub", sub.startsWith("Failed"))
+        assertTrue("failure reason must be visible: $sub", sub.contains("HTTP 404"))
 
         holder.itemView.performClick()
         shadowOf(Looper.getMainLooper()).idle()

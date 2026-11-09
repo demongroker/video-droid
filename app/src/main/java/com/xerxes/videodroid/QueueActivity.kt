@@ -31,7 +31,7 @@ import java.io.File
 class QueueActivity : AppCompatActivity() {
 
     private lateinit var list: RecyclerView
-    private lateinit var empty: TextView
+    private lateinit var empty: View
     private lateinit var clear: View
     private lateinit var pauseAll: com.google.android.material.button.MaterialButton
     private val handler = Handler(Looper.getMainLooper())
@@ -47,6 +47,14 @@ class QueueActivity : AppCompatActivity() {
 
         list = findViewById(R.id.queueList)
         empty = findViewById(R.id.queueEmpty)
+        findViewById<View>(R.id.queueEmptyGo).setOnClickListener {
+            // Land on the Download tab, replacing this screen in the back stack.
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+            finish()
+        }
         clear = findViewById(R.id.queueClear)
         pauseAll = findViewById(R.id.queuePauseAll)
 
@@ -254,6 +262,9 @@ class QueueActivity : AppCompatActivity() {
             val title: TextView = v.findViewById(R.id.queueRowTitle)
             val sub: TextView = v.findViewById(R.id.queueRowSub)
             val bar: LinearProgressIndicator = v.findViewById(R.id.queueRowProgress)
+            val thumb: android.widget.ImageView = v.findViewById(R.id.queueRowThumb)
+            val retry: com.google.android.material.button.MaterialButton =
+                v.findViewById(R.id.queueRowRetry)
             val cancel: View = v.findViewById(R.id.queueRowCancel)
             val pause: com.google.android.material.button.MaterialButton =
                 v.findViewById(R.id.queueRowPause)
@@ -271,24 +282,36 @@ class QueueActivity : AppCompatActivity() {
             val job = jobs.getOrNull(position) ?: return
             val running = DownloadQueue.isClaimed(job.id)
 
-            holder.title.text = when {
-                job.failed -> "Failed — ${job.failReason.ifBlank { "tap to retry" }}"
-                job.paused -> if (job.progress > 0) "Paused · ${job.progress}% done" else "Paused"
+            // Stage 3: the real name is the headline; state, quality, speed and ETA sit
+            // underneath it where they can be scanned without reading the whole row.
+            val state = when {
+                job.failed -> "Failed — ${job.failReason.ifBlank { "tap retry" }}"
+                job.paused -> if (job.progress > 0) "Paused · ${job.progress}%" else "Paused"
                 running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
-                else -> if (job.progress > 0) "Waiting · ${job.progress}% done" else "Waiting"
+                else -> if (job.progress > 0) "Waiting · ${job.progress}%" else "Waiting"
             }
+            holder.title.text = job.displayName.ifBlank { job.url }.trim()
             // While an item is actually transferring, show the live speed/ETA from yt-dlp
             // rather than just the quality tag — that is the number worth glancing at.
             val detail = if (running) DownloadService.liveDetail(job.id) else ""
-            holder.sub.text = listOf("${job.opts.dlQuality}", job.displayName, detail)
+            holder.sub.text = listOf(state, job.opts.dlQuality, detail)
                 .filter { it.isNotBlank() }
                 .joinToString(" · ")
-            if (running && job.progress > 0) {
+
+            holder.thumb.setTag(R.id.queueRowThumb, job.id)
+            QueueThumb.load(this@QueueActivity, job, holder.thumb)
+
+            if (job.progress > 0 || running) {
                 holder.bar.visibility = View.VISIBLE
-                holder.bar.setProgressCompat(job.progress, false)
+                holder.bar.setProgressCompat(job.progress.coerceIn(0, 100), false)
             } else {
                 holder.bar.visibility = View.GONE
             }
+
+            // Explicit retry on failed rows instead of "tap the row and hope".
+            holder.retry.visibility = if (job.failed) View.VISIBLE else View.GONE
+            holder.retry.setOnClickListener { retry(job) }
+
             holder.cancel.visibility = if (job.failed) View.GONE else View.VISIBLE
             holder.cancel.setOnClickListener { cancelOne(job) }
 

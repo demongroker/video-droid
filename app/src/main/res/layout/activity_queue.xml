@@ -35,14 +35,33 @@
             android:text="Clear" />
     </LinearLayout>
 
-    <TextView
+    <LinearLayout
         android:id="@+id/queueEmpty"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
         android:padding="24dp"
-        android:text="Nothing queued."
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:visibility="gone" />
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Paste a link to start"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/vd_text_dim" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/queueEmptyGo"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Go to Download"
+            android:textAllCaps="false"
+            android:textColor="@color/vd_violet_soft" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/queueList"

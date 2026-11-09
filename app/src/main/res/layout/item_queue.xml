@@ -9,9 +9,19 @@
     android:paddingTop="10dp"
     android:paddingBottom="10dp">
 
+    <!-- Stage 3: real thumbnail (poster from the page, or a frame from a local file). -->
+    <ImageView
+        android:id="@+id/queueRowThumb"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:background="@color/vd_surface_high"
+        android:contentDescription="Thumbnail"
+        android:scaleType="centerCrop" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -19,6 +29,8 @@
             android:id="@+id/queueRowTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textAppearance="?attr/textAppearanceBodyLarge" />
 
         <TextView
@@ -40,6 +52,15 @@
             xmlns:app="http://schemas.android.com/apk/res-auto"
             android:visibility="gone" />
     </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/queueRowRetry"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minWidth="0dp"
+        android:text="Retry"
+        android:visibility="gone" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/queueRowPause"

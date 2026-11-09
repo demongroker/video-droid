@@ -105,6 +105,54 @@ object MediaUrlParser {
         return ParsedPage(cleanedMedia, frames.distinct(), decoded)
     }
 
+    /**
+     * Stage 3: the page's own preview image, so a queued row can show a real thumbnail.
+     * Checks og:image, twitter:image, <video poster> and <link rel="image_src">, in that
+     * order, and resolves protocol-relative / root-relative URLs against [baseUrl].
+     */
+    fun poster(html: String, baseUrl: String = ""): String? {
+        if (html.isBlank()) return null
+        val found = LinkedHashMap<String, String>()
+        Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
+            val tag = m.value
+            val key = (attr(tag, "property") ?: attr(tag, "name") ?: "").lowercase()
+            if (key == "og:image" || key == "og:image:secure_url" || key == "twitter:image") {
+                attr(tag, "content")?.let { found.putIfAbsent(key, it) }
+            }
+        }
+        Regex("""<video\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
+            attr(m.value, "poster")?.let { found.putIfAbsent("video:poster", it) }
+        }
+        Regex("""<link\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
+            val tag = m.value
+            if ((attr(tag, "rel") ?: "").contains("image_src", ignoreCase = true)) {
+                attr(tag, "href")?.let { found.putIfAbsent("link:image_src", it) }
+            }
+        }
+        val order = listOf("og:image:secure_url", "og:image", "twitter:image", "video:poster", "link:image_src")
+        for (k in order) {
+            val raw = found[k]?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+            absolutize(raw, baseUrl)?.let { return it }
+        }
+        return null
+    }
+
+    /** Resolve "//host/x.jpg" and "/x.jpg" against the page URL; reject data: URIs. */
+    private fun absolutize(raw: String, baseUrl: String): String? {
+        if (raw.startsWith("data:", ignoreCase = true)) return null
+        if (raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) {
+            return raw
+        }
+        if (baseUrl.isBlank()) return null
+        return try {
+            val base = java.net.URI(baseUrl)
+            val resolved = base.resolve(raw).toString()
+            resolved.takeIf { it.startsWith("http") }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     /** Best candidate: master playlist first, then largest-looking file. */
     fun pickBest(candidates: List<String>): String? {
         val clean = candidates
