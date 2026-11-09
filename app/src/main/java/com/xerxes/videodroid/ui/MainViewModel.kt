@@ -213,6 +213,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } else ""
             _state.update {
                 if (result.ok && result.uri != null) {
+                    // A duplicate is "finished" too, but it did not save anything — say what
+                    // actually happened instead of claiming a new file was written.
+                    val line = if (result.message.contains("Already", ignoreCase = true)) {
+                        result.message
+                    } else {
+                        "Saved. Tap to open\n${result.uri}"
+                    }
                     it.copy(
                         busy = remaining > 0,
                         queueCount = remaining,
@@ -220,7 +227,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         resultUri = result.uri,
                         lastFailUrl = null,
                         openFailedVisible = false,
-                        statusText = prefix + "Saved. Tap to open\n${result.uri}",
+                        statusText = prefix + line,
                         progressVisible = false,
                         progressIndeterminate = false,
                         progressPercent = null,

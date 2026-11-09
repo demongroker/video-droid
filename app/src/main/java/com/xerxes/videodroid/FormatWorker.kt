@@ -1,5 +1,6 @@
 package com.xerxes.videodroid
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -437,12 +438,27 @@ object FormatWorker {
                 emit("Downloaded: ${src.length() / 1024 / 1024} MB")
             }
 
+            // ---- duplicate guard -------------------------------------------------------
+            // The same video must never be stored twice. Owners paste the same X post with a
+            // `?s=09` tail, and the fallback path returns bare tweet text where the native path
+            // returned "<account>_-_<text>-[<id>]", so an exact name match alone is not enough:
+            // match on the tweet's status tag first, then on the exact file name.
+            val nameTitle = titleWithTweetId(url, title)
+
+            fun fileNameFor(ext: String): String = fileName(opts, ext, nameTitle, url)
+
             val originalAspect = opts.aspect.equals("original", ignoreCase = true)
             // Export off, or Original + trim off: never re-encode.
             if (!opts.exportEnabled || (originalAspect && !opts.trimEnabled)) {
                 if (cancelRequested.get()) return FormatResult(false, "Cancelled")
                 val ext = src.extension.ifEmpty { "mp4" }
-                val name = fileName(opts, ext, title)
+                val name = fileNameFor(ext)
+                savedDuplicate(context, name, url)?.let { existing ->
+                    if (!isPersistedSource(context, src)) src.delete()
+                    emit("Already in library — skipped")
+                    JobDiag.finishJob()
+                    return FormatResult(true, "Already in library — skipped", existing)
+                }
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
                 if (!isPersistedSource(context, src)) src.delete()
                 if (uri == null) return FormatResult(false, "Could not save to Downloads")
@@ -602,7 +618,13 @@ object FormatWorker {
                 if (out.exists()) out.delete()
                 if (remux.exists()) remux.delete()
                 val ext = src.extension.ifEmpty { "mp4" }
-                val name = fileName(opts, ext, title)
+                val name = fileNameFor(ext)
+                savedDuplicate(context, name, url)?.let { existing ->
+                    if (!isPersistedSource(context, src)) src.delete()
+                    JobDiag.finishJob()
+                    emit("Already in library — skipped")
+                    return FormatResult(true, "Already in library — skipped", existing)
+                }
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
                 val msg = if (uri != null) {
                     if (!isPersistedSource(context, src)) src.delete()
@@ -625,7 +647,15 @@ object FormatWorker {
             if (!out.exists()) return keepDownloaded("FFmpeg produced no output")
 
             emit("Saving to phone...")
-            val name = fileName(opts, "mp4", title)
+            val name = fileNameFor("mp4")
+            savedDuplicate(context, name, url)?.let { existing ->
+                if (!isPersistedSource(context, src)) src.delete()
+                out.delete()
+                if (remux.exists()) remux.delete()
+                emit("Already in library — skipped")
+                JobDiag.finishJob()
+                return FormatResult(true, "Already in library — skipped", existing)
+            }
             val uri = saveToDownloads(context, out, name)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
             if (!isPersistedSource(context, src)) src.delete()
@@ -970,13 +1000,18 @@ object FormatWorker {
     }
 
     /** OPT-VIDEODROID-006: build a sortable, identifiable base name. */
-    private fun fileNameBase(opts: FormatOptions, title: String?): String {
+    fun fileNameBase(opts: FormatOptions, title: String?, url: String = ""): String {
         val raw = title.orEmpty()
         val idMatch = Regex("\\[(\\d{10,25})\\]").find(raw)
         val tail = "${qualityTag(opts)}_${aspectFileTag(opts)}"
         if (idMatch == null) {
             // not a tweet-style name: unchanged behaviour, just sanitised
-            return "${shortTitle(title)}_$tail"
+            val head = shortTitle(title)
+            // "video" means the extractor gave us nothing usable (a direct MP4 resolved by the
+            // page fallback has no title). Every such download used to be called
+            // video_720p_Original.mp4, so the next one collided and was written again with a
+            // timestamp suffix — a duplicate file under a different name. Tie it to the link.
+            return if (head == "video") "video_${MediaIdentity.shortTag(url)}_$tail" else "${head}_$tail"
         }
         val statusId = idMatch.groupValues[1]
         val head = raw.substring(0, idMatch.range.first).trim().trimEnd('-', '_', ' ')
@@ -1001,19 +1036,72 @@ object FormatWorker {
         }
     }
 
-    fun fileName(opts: FormatOptions, ext: String, title: String? = null): String {
+    fun fileName(opts: FormatOptions, ext: String, title: String? = null, url: String = ""): String {
         // OPT-VIDEODROID-006: identifiable + sortable. Kept INSIDE the existing
         // function so no call site changes and nothing else is rewritten.
         // For X/Twitter the title is "<account>_-_<post text>-[<status id>]": pull it
         // apart so account, post date and a short stable id lead the name instead of
         // a single word. Non-tweet titles keep exactly the old behaviour.
-        val base = fileNameBase(opts, title)
+        val base = fileNameBase(opts, title, url)
         val destDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
             "VideoDroid",
         )
         val candidate = File(destDir, "$base.$ext")
         return if (candidate.exists()) "${base}_${System.currentTimeMillis()}.$ext" else "$base.$ext"
+    }
+
+    /** Make the name carry the tweet id even when the fallback path returned only bare text. */
+    private fun titleWithTweetId(url: String, title: String): String {
+        val id = MediaIdentity.twitterStatusId(url) ?: return title
+        if (title.contains("[$id]")) return title
+        return title.ifBlank { "x" } + " [$id]"
+    }
+
+    /**
+     * The copy of this media that is already in the library, or null.
+     *
+     * Nothing is overwritten or deleted here — a duplicate is simply not created.
+     */
+    private fun savedDuplicate(context: Context, name: String, url: String): Uri? {
+        val tag = MediaIdentity.statusTag(MediaIdentity.twitterStatusId(url))
+        if (tag != null) findSaved(context, "%$tag%", exact = false)?.let { return it }
+        return findSaved(context, name, exact = true)
+    }
+
+    /** Look a saved download up by display name, inside the app's own Downloads folder. */
+    private fun findSaved(context: Context, pattern: String, exact: Boolean): Uri? {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} ${if (exact) "=" else "LIKE"} ?" +
+                " AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+            val args = arrayOf(pattern, "%VideoDroid%")
+            runCatching {
+                context.contentResolver.query(
+                    collection,
+                    arrayOf(MediaStore.MediaColumns._ID),
+                    selection,
+                    args,
+                    null,
+                )?.use { c ->
+                    if (c.moveToFirst()) {
+                        return ContentUris.withAppendedId(collection, c.getLong(0))
+                    }
+                }
+            }
+            return null
+        }
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "VideoDroid",
+        )
+        val hit = if (exact) {
+            File(dir, pattern)
+        } else {
+            val needle = pattern.trim('%')
+            dir.listFiles()?.firstOrNull { it.name.contains(needle) }
+        }
+        return if (hit != null && hit.isFile && hit.length() > 0) Uri.fromFile(hit) else null
     }
 
     fun saveToDownloads(context: Context, file: File, name: String, mime: String = "video/mp4"): Uri? {

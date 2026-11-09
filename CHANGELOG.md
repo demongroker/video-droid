@@ -2,6 +2,26 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.6 (versionCode 75)
+
+### No more duplicate videos
+Owners reported the same X video twice in the Library. Three separate causes, all fixed:
+
+- **The same post counted as a different link.** An X share link carries a `?s=09`
+  tail, and the same post arrives as `x.com/…/status/ID`, `twitter.com/…/status/ID`
+  or `x.com/i/web/status/ID`. Compared as raw strings none of those matched, so the
+  queue accepted the video twice. Links are now compared by canonical form (host
+  normalised, tracking parameters dropped, trailing slash ignored) and, for X, by
+  status id — all forms are the same row.
+- **A second paste while the first was already saved** wrote a second file with a
+  `_<timestamp>` suffix. The save stage now looks for the video first — by the
+  tweet's status tag, else by exact file name — and reports "Already in library —
+  skipped" instead of creating a copy. Nothing is ever overwritten or deleted.
+- **Downloads with no usable title** (a direct MP4 resolved by the page fallback has
+  none) were all called `video_720p_Original.mp4`, so each one after the first was
+  written as `video_720p_Original_<timestamp>.mp4`. The name now carries a short tag
+  derived from the link, so one link always produces one name.
+
 ## 2.1.5 (versionCode 74)
 
 ### Stopping one download no longer breaks the others

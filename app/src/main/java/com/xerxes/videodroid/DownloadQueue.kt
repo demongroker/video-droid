@@ -68,14 +68,26 @@ object DownloadQueue {
     /** Is this URL already queued (live, paused, failed or waiting out a retry)? */
     fun has(ctx: Context, url: String): Boolean = synchronized(lock) {
         val u = url.trim()
-        u.isNotEmpty() && loadLocked(ctx).any { it.url.trim() == u }
+        u.isNotEmpty() && loadLocked(ctx).any { sameLink(it.url, u) }
+    }
+
+    /**
+     * Same media, however the link was pasted. X share links carry `?s=09`, and the same post
+     * can arrive as x.com / twitter.com / i/web/status — compared as raw strings those were all
+     * different, so the queue happily took the same video twice.
+     */
+    private fun sameLink(a: String, b: String): Boolean {
+        val ta = a.trim()
+        val tb = b.trim()
+        if (ta == tb) return true
+        return MediaIdentity.sameMedia(ta, tb)
     }
 
     /** New queue size, or **-1** when this URL is already queued. */
     fun enqueue(ctx: Context, job: QueuedJob): Int = synchronized(lock) {
         val jobs = loadLocked(ctx)
         val url = job.url.trim()
-        if (url.isNotEmpty() && jobs.any { it.url.trim() == url }) {
+        if (url.isNotEmpty() && jobs.any { sameLink(it.url, url) }) {
             return@synchronized -1
         }
         jobs.add(job.copy(id = job.id.ifEmpty { newId() }))
