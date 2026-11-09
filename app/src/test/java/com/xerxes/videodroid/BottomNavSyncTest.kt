@@ -91,4 +91,30 @@ class BottomNavSyncTest {
         )
         c.pause().stop().destroy()
     }
+
+    /**
+     * The recording at 11:49 shows a *persistent* mismatch: the Download screen with the
+     * **Library** pill lit, still true 16 seconds later. That is the saved-instance-state
+     * restore winning, not a transition artifact — so recreate the screen with a bundle whose
+     * bar was checked on Library and assert the pill lands on the screen that is showing.
+     */
+    @Test
+    fun `a restored screen keeps its own pill`() {
+        val first = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val nav1 = navOf(first.get())
+        // Force the checked state without going through the listener (no navigation).
+        nav1.menu.findItem(R.id.tab_library)?.isChecked = true
+        val bundle = android.os.Bundle()
+        first.saveInstanceState(bundle)
+        first.pause().stop().destroy()
+
+        val second = Robolectric.buildActivity(MainActivity::class.java).setup(bundle)
+        val nav2 = navOf(second.get())
+        assertEquals(
+            "a restored bar must not show a tab whose screen is not on top",
+            R.id.tab_download,
+            nav2.selectedItemId,
+        )
+        second.pause().stop().destroy()
+    }
 }
