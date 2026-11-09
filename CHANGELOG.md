@@ -2,6 +2,29 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.1 (versionCode 80)
+
+### Bottom bar follows the screen, every time
+This app is three activities, not a Navigation graph, so there is no `NavController` to bind
+`selected` to — the fix is the activity-level equivalent:
+- The pill is applied **immediately** and again after layout. It used to be deferred with
+  `nav.post { }`, which is the one-frame lag you could see when tapping a tab.
+- `isSaveEnabled = false` on the bar, so `BottomNavigationView` can no longer restore a stale
+  destination from instance state and fight the screen — that is how "Library content on
+  screen, Download pill highlighted" happened.
+- Tapping the tab you are already on no longer jerks the pill.
+- Library's bar was **inert** (it called only `sync()`, never installed the listener, so tab
+  taps did nothing there); `sync()` and `wire()` are now the same idempotent installer.
+
+### Find duplicates dialog: Material 3 and off the UI thread
+- Uses `MaterialAlertDialogBuilder` — the theme is `Theme.Material3.DayNight`, so the dialog
+  now matches the rest of the app instead of rendering an AppCompat/Material 2 card. The body
+  is one wrapping block that scales with the system font size.
+- "Move extras" now runs the MediaStore updates on a worker thread behind a progress dialog
+  and reports the real result, instead of a loop of `contentResolver.update()` calls on the
+  UI thread.
+- The Library grid itself is also loaded off the main thread.
+
 ## 2.2.0 (versionCode 79)
 
 ### A cancel that actually ends

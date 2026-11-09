@@ -19,8 +19,12 @@ import android.widget.GridView
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /** Finished downloads, as a thumbnail grid with a storage bar (v2). */
@@ -31,6 +35,7 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var grid: GridView
     private lateinit var empty: TextView
     private var items: List<Item> = emptyList()
+    private var moving = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,12 +73,20 @@ class LibraryActivity : AppCompatActivity() {
         reload()
     }
 
+    /**
+     * Load off the main thread: a MediaStore query with thumbnails does not belong on the UI
+     * thread, and the duplicate scan needs the same list.
+     */
     private fun reload() {
-        items = loadItems()
-        grid.adapter = GridAdapter(items)
-        empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-        grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
-        updateStorage()
+        lifecycleScope.launch {
+            val loaded = withContext(Dispatchers.IO) { loadItems() }
+            if (isFinishing || isDestroyed) return@launch
+            items = loaded
+            grid.adapter = GridAdapter(items)
+            empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+            updateStorage()
+        }
     }
 
     private fun share(uri: Uri) {
@@ -109,7 +122,11 @@ class LibraryActivity : AppCompatActivity() {
         }
         val more = if (groups.size > 3) "\n…and ${groups.size - 3} more" else ""
 
-        AlertDialog.Builder(this)
+        // Material 3 dialog: the app theme is Theme.Material3.DayNight, so the Material
+        // builder gives the same shapes/typography as the rest of the screens (the AppCompat
+        // builder rendered a Material 2 card). The message is one wrapping block so it scales
+        // with the system font size instead of being clamped into a fixed-height layout.
+        MaterialAlertDialogBuilder(this)
             .setTitle("${extras.size} duplicate${if (extras.size == 1) "" else "s"} found")
             .setMessage(
                 "$preview$more\n\nMove the extra copies to Downloads/VideoDroid/duplicates? " +
@@ -120,11 +137,44 @@ class LibraryActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * The MediaStore update for every extra runs on a worker thread with its own progress
+     * dialog — a long list of `contentResolver.update()` calls on the UI thread is how the
+     * dialog used to freeze mid-tap.
+     */
     private fun quarantine(extras: List<DuplicateScan.Entry>) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             Toast.makeText(this, "Needs Android 10 or newer", Toast.LENGTH_LONG).show()
             return
         }
+        if (moving) return
+        moving = true
+
+        val progress = MaterialAlertDialogBuilder(this)
+            .setTitle("Moving duplicates…")
+            .setMessage("${extras.size} file${if (extras.size == 1) "" else "s"}")
+            .setCancelable(false)
+            .create()
+        progress.show()
+
+        lifecycleScope.launch {
+            val movedTo = withContext(Dispatchers.IO) { moveExtras(extras) }
+            runCatching { progress.dismiss() }
+            moving = false
+            reload()
+            val (moved, failed) = movedTo
+            val msg = when {
+                moved == 0 ->
+                    "Could not move any duplicates — nothing was deleted. Use Files → Downloads/VideoDroid."
+                failed == 0 -> "Moved $moved duplicate${if (moved == 1) "" else "s"} to VideoDroid/duplicates"
+                else -> "Moved $moved, could not move $failed (nothing deleted)"
+            }
+            Toast.makeText(this@LibraryActivity, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Blocking MediaStore work — only ever called from a background thread. */
+    private fun moveExtras(extras: List<DuplicateScan.Entry>): Pair<Int, Int> {
         var moved = 0
         var failed = 0
         for (e in extras) {
@@ -137,14 +187,7 @@ class LibraryActivity : AppCompatActivity() {
                 .getOrDefault(false)
             if (ok) moved++ else failed++
         }
-        reload()
-        val msg = when {
-            moved == 0 ->
-                "Could not move any duplicates — nothing was deleted. Use Files → Downloads/VideoDroid."
-            failed == 0 -> "Moved $moved duplicate${if (moved == 1) "" else "s"} to VideoDroid/duplicates"
-            else -> "Moved $moved, could not move $failed (nothing deleted)"
-        }
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        return moved to failed
     }
 
     private fun idOf(uri: Uri): Long =
