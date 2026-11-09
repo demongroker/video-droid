@@ -49,19 +49,104 @@
                 android:progressBackgroundTint="@color/vd_outline"
                 android:progressTint="@color/vd_emerald" />
 
-            <Button
-                android:id="@+id/findDuplicates"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:background="?android:attr/selectableItemBackground"
-                android:minHeight="40dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/findDuplicates"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
                 android:text="Find duplicates"
                 android:textAllCaps="false"
                 android:textColor="@color/vd_emerald"
                 android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/librarySort"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="Sort: newest"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Stage 4: appears the moment a file is long-pressed. -->
+            <LinearLayout
+                android:id="@+id/librarySelectionBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/librarySelectionCount"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="0 selected"
+                    android:textColor="@color/vd_text"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/librarySelShare"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:text="Share"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_violet_soft"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/librarySelMove"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:text="Move"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/librarySelDelete"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:text="Delete"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_danger"
+                    android:textSize="13sp" />
+
+                <Button
+                    android:id="@+id/librarySelClose"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:text="✕"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim"
+                    android:textSize="13sp" />
+            </LinearLayout>
         </LinearLayout>
 
         <GridView

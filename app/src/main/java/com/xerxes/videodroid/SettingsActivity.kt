@@ -60,6 +60,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
 
+        findViewById<Button>(R.id.libraryLockButton).setOnClickListener { toggleLibraryLock() }
+        findViewById<Button>(R.id.hideGalleryButton).setOnClickListener { toggleHideGallery() }
+        refreshPrivacyRows()
+
         findViewById<android.widget.TextView>(R.id.settingsVersion).text =
             "VideoDroid ${installedVersion()}"
     }
@@ -132,6 +136,57 @@ class SettingsActivity : AppCompatActivity() {
             .putInt(KEY_TRIM_END, 1)
             .apply()
         toast("Recommended settings applied — open Download")
+    }
+
+    // ---- privacy (stage 4) ----------------------------------------------------------
+
+    private fun refreshPrivacyRows() {
+        val lock = findViewById<Button>(R.id.libraryLockButton) ?: return
+        lock.text = if (LibraryLock.enabled(this)) {
+            if (LibraryLock.canAuthenticate(this)) "Library lock: on (fingerprint / PIN)"
+            else "Library lock: on, but no phone PIN set ⚠"
+        } else {
+            "Library lock: off — tap to lock"
+        }
+        val hide = findViewById<Button>(R.id.hideGalleryButton) ?: return
+        hide.text = if (GalleryHider.isHidden(this)) {
+            "Hide from Gallery: on"
+        } else {
+            "Hide from Gallery: off"
+        }
+    }
+
+    private fun toggleLibraryLock() {
+        if (LibraryLock.enabled(this)) {
+            LibraryLock.setEnabled(this, false)
+            toast("Library lock off")
+            refreshPrivacyRows()
+            return
+        }
+        if (!LibraryLock.canAuthenticate(this)) {
+            toast("Set a phone PIN, pattern or fingerprint first")
+            runCatching {
+                startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+            }
+            return
+        }
+        LibraryLock.setEnabled(this, true)
+        toast("Library will ask for fingerprint / PIN")
+        refreshPrivacyRows()
+    }
+
+    private fun toggleHideGallery() {
+        val hide = !GalleryHider.isHidden(this)
+        val error = GalleryHider.setHidden(this, hide)
+        if (error != null) {
+            toast("Could not change the marker: $error")
+        } else {
+            toast(
+                if (hide) "Marker written — gallery apps ignore VideoDroid/"
+                else "Marker removed",
+            )
+        }
+        refreshPrivacyRows()
     }
 
     // ---- app -----------------------------------------------------------------------
