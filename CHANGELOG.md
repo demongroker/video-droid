@@ -2,6 +2,24 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.2.0 (versionCode 79)
+
+### A cancel that actually ends
+2.1.9 stopped the service as soon as nothing was *runnable*, but it still refused to stop
+while a worker thread was alive. A worker could be parked forever in the shared encoder's
+lock (`CONVERT_LOCK.lock()` — unbounded and cancel-blind), so after a Cancel the thread never
+exited, the service never left the foreground, and the card sat on "Cancelling…" over an
+empty queue.
+
+- The converter wait is now **cancellable and bounded**: it polls the cancel flag every
+  200 ms and aborts with "Cancelled" instead of blocking indefinitely.
+- A cancelled FFmpeg session is waited on for at most 5 s; after that the worker stops
+  waiting and reports failure rather than pinning the thread.
+- Cancel now arms a **6-second shutdown watchdog**: if nothing is runnable it stops the
+  service regardless of a wedged worker (worker threads are daemons, so nothing is lost), and
+  the `shuttingDown` flag keeps the notification from being re-posted. Any new command
+  supersedes the watchdog.
+
 ## 2.1.9 (versionCode 78)
 
 ### The stuck "Cancelling…" notification is gone

@@ -43,6 +43,9 @@ class DownloadService : Service() {
     @Volatile
     private var shuttingDown = false
 
+    /** Pending "stop even if a worker is wedged" check, see [startShutdownWatchdog]. */
+    private var shutdownWatchdog: Runnable? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -93,6 +96,9 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         isRunning = true
         shuttingDown = false
+        // Any new command supersedes a pending shutdown: the watchdog is re-armed by the
+        // cancel branch and must never kill a service that has just been given work.
+        cancelShutdownWatchdog()
         acquireLocks()
         watchNetwork()
         when (intent?.action) {
@@ -104,6 +110,9 @@ class DownloadService : Service() {
                 val paused = DownloadQueue.pauseAll(applicationContext)
                 publishGlobal(ServiceLifecycle.stopMessage(paused.size))
                 maybeStopWhenIdle()
+                // A worker blocked in a call we cannot interrupt (a wedged encoder, a socket
+                // that ignores the cancel) must not keep a dead notification alive.
+                startShutdownWatchdog()
             }
             ACTION_PAUSE -> {
                 pauseAll(this)
@@ -207,6 +216,32 @@ class DownloadService : Service() {
             }
             runCatching { ensurePump() }
         }
+    }
+
+    /**
+     * After a Cancel, give the workers a short grace period to unwind and then stop the
+     * service **regardless**. Every worker thread is a daemon, so a wedged one cannot keep the
+     * process (or the notification) alive; the shutdown flag stops it re-posting anything.
+     */
+    private fun startShutdownWatchdog() {
+        cancelShutdownWatchdog()
+        val r = Runnable {
+            shutdownWatchdog = null
+            if (hasRunnableWork()) return@Runnable
+            if (workerThreads.isNotEmpty()) {
+                // Second, harder nudge before giving up on the worker.
+                FormatWorker.requestCancel()
+                publishGlobal("Stopped")
+            }
+            shutdownService()
+        }
+        shutdownWatchdog = r
+        netProbeHandler.postDelayed(r, SHUTDOWN_GRACE_MS)
+    }
+
+    private fun cancelShutdownWatchdog() {
+        shutdownWatchdog?.let { netProbeHandler.removeCallbacks(it) }
+        shutdownWatchdog = null
     }
 
     /** Anything left that could still run on its own? */
@@ -514,6 +549,9 @@ class DownloadService : Service() {
 
         /** `2.4MiB/s`, `850.12KiB/s` — yt-dlp's progress rate. */
         private val SPEED_RE = Regex("""([\d.]+\s*[KMG]i?B/s)""")
+
+        /** Grace period after a Cancel before the service stops even if a worker is wedged. */
+        private const val SHUTDOWN_GRACE_MS = 6_000L
 
         /** `ETA 00:03` / `ETA 01:20:05`. */
         private val ETA_RE = Regex("""ETA\s+(\d+(?::\d+){0,2})""")

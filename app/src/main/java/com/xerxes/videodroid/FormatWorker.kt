@@ -788,6 +788,17 @@ object FormatWorker {
     }
 
     /**
+     * Thrown when a worker is asked to stop while blocked on the shared encoder.
+     *
+     * The message must contain "cancel" — [isCancelMessage] maps it to a user cancellation
+     * rather than a failure, so the row is released instead of being parked as broken.
+     */
+    private class WorkerCancelled : RuntimeException("Cancelled")
+
+    /** How long a cancelled FFmpeg session is waited on before the worker gives up on it. */
+    private const val CANCEL_WAIT_LIMIT_MS = 5_000L
+
+    /**
      * Percent = stats.time_ms / expectedMs. Unknown duration: elapsed wall time, no fake %.
      * Throttle ~2% or 500ms. Cancel uses FFmpegKit.cancel(sessionId) for this job only.
      */
@@ -799,11 +810,26 @@ object FormatWorker {
     ): com.arthenica.ffmpegkit.FFmpegSession {
         // Downloads run in parallel, the converter does not: one FFmpeg session
         // at a time, whatever the queue is doing.
-        if (!CONVERT_LOCK.tryLock()) {
+        //
+        // The wait MUST be cancellable and bounded. An unbounded `lock()` here kept a
+        // cancelled job's worker thread alive forever; the service then refused to stop
+        // because a worker was still running, which is how the notification stayed stuck on
+        // "Cancelling…" with an empty queue.
+        var locked = CONVERT_LOCK.tryLock()
+        if (!locked) {
             status("Waiting for converter…")
-            CONVERT_LOCK.lock()
+            while (!locked) {
+                if (cancelRequested.get()) throw WorkerCancelled()
+                locked = try {
+                    CONVERT_LOCK.tryLock(200, TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw WorkerCancelled()
+                }
+            }
         }
         try {
+            if (cancelRequested.get()) throw WorkerCancelled()
             return executeConvertLocked(args, expectedMs, status, label)
         } finally {
             CONVERT_LOCK.unlock()
@@ -845,10 +871,15 @@ object FormatWorker {
         )
         activeFfmpegSessionId.set(session.sessionId)
         activeFfmpegJobId = jobIdOfThread.get()
+        var cancelledWaitMs = 0L
         try {
             while (!done.await(200, TimeUnit.MILLISECONDS)) {
                 if (cancelRequested.get()) {
                     cancelActiveFfmpegOnly()
+                    cancelledWaitMs += 200
+                    // A wedged session must not pin the worker thread forever — stop waiting
+                    // and let the caller treat it as a failure.
+                    if (cancelledWaitMs >= CANCEL_WAIT_LIMIT_MS) break
                 }
             }
         } finally {
