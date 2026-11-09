@@ -536,21 +536,35 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
     except Exception as e:
         low = str(e).lower()
         if "format is not available" in low:
-            if export_enabled:
-                raise HevcOnlyError(
-                    "This video is HEVC-only. Cannot convert for %s on this phone. Try another source." % quality
-                )
-            try:
-                info = _extract("best*/bv*+ba/b")
-            except (_Cancelled, NeedXLogin, NoVideoInTweet):
-                raise
-            except Exception:
+            # A format filter can only match metadata yt-dlp actually has. A direct MP4,
+            # a generic-extractor result or many HLS manifests report no vcodec/height, so
+            # "bv*[vcodec^=avc1][height<=1080]" matches nothing and yt-dlp answers
+            # "Requested format is not available" — which is NOT a codec verdict. Retry
+            # without the codec gate and let the encode stage judge; only a source that
+            # actually reports HEVC may be reported as HEVC-only (2.1.4).
+            last_err = e
+            for alt in ("best*/bv*+ba/b", None):
                 try:
-                    info = _extract(None)
+                    info = _extract(alt)
+                    break
                 except (_Cancelled, NeedXLogin, NoVideoInTweet):
                     raise
-                except Exception:
-                    ytdlp_err = e
+                except Exception as e2:
+                    last_err = e2
+                    if "format is not available" not in str(e2).lower():
+                        # A real failure (network, geo, auth) — do not mask it with a
+                        # codec story, and let the Twitter classifier see it.
+                        break
+            if info is None:
+                alt_msg = str(last_err).lower()
+                if export_enabled and any(
+                    t in alt_msg for t in ("hevc", "hev1", "h265", "h.265")
+                ):
+                    raise HevcOnlyError(
+                        "This source is HEVC-only. Cannot convert for %s on this phone. "
+                        "Try another source." % quality
+                    )
+                ytdlp_err = last_err
         else:
             ytdlp_err = e
         if ytdlp_err is not None:

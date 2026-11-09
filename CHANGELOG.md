@@ -2,6 +2,21 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.1.4 (versionCode 73)
+
+### Direct-video sites no longer fail as "HEVC-only"
+With **Export on** (the default) the download asked for
+`bv*[vcodec^=avc1][height<=1080]`. That filter needs codec metadata, and a
+direct MP4 link — or anything resolved by the page fallback (LiteSpeed
+`player-x.php?q=` sites, plain `<video src>` pages, some HLS) — has none, so
+yt-dlp answered "Requested format is not available" and the app reported
+*"This video is HEVC-only"* about a perfectly ordinary H.264 file.
+
+Now that answer is treated as what it is — a metadata mismatch, not a codec
+verdict. The download retries without the codec gate (`best*/bv*+ba/b`, then no
+format filter) and only a source that *actually* reports `hevc`/`hev1`/`h265`
+is refused on the export path. Export-off behaviour is unchanged.
+
 ## 2.1.3 (versionCode 72)
 
 ### "Already in queue" warning actually stays visible
