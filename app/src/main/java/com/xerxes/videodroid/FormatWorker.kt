@@ -1174,9 +1174,12 @@ object FormatWorker {
         if (Build.VERSION.SDK_INT >= 29) {
             val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
             val op = if (exactMatch) "=" else "LIKE ? ESCAPE '\\'"
+            // Quarantined copies live in the `duplicates` subfolder and must not count as
+            // "already in library", or moving them aside would never free the name up.
             val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} $op" +
-                " AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-            val args = arrayOf(pattern, "%VideoDroid%")
+                " AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?" +
+                " AND ${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?"
+            val args = arrayOf(pattern, "%VideoDroid%", "%duplicates%")
             runCatching {
                 context.contentResolver.query(
                     collection,
