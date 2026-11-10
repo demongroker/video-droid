@@ -28,15 +28,51 @@ import java.net.URL
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
 
+    /** One background thread: checks never overlap and never run on the UI thread. */
+    private val executor: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "update-check").apply { isDaemon = true }
+        }
+
     private data class ReleaseInfo(val tag: String, val apkUrl: String)
     private data class FetchOutcome(val info: ReleaseInfo?, val error: String?)
 
+    /**
+     * Check for an update **without touching the caller's thread**.
+     *
+     * This used to call fetchLatest() inline, which is a blocking HTTP request, so every launch
+     * and every "Check for updates" tap threw NetworkOnMainThreadException and the toast said so
+     * ("GitHub: NetworkOnMainThreadException"). The fetch now runs on a single background thread
+     * and only the result is posted back to the UI.
+     */
     fun check(activity: Activity, installedVersion: String, userInitiated: Boolean = false) {
-        val outcome = fetchLatest()
+        val app = activity.applicationContext
+        executor.execute {
+            val outcome = runCatching { fetchLatest() }.getOrElse { failure ->
+                // Raw exception stays in the local non-fatal log; the UI gets plain English.
+                CrashLog.writeNonFatal(app, "update check", failure)
+                FetchOutcome(null, "Couldn't check for updates — try again")
+            }
+            evaluate(activity, installedVersion, userInitiated, outcome)
+        }
+    }
+
+    /** Runs on the background thread; everything that touches the UI goes through report(). */
+    private fun evaluate(
+        activity: Activity,
+        installedVersion: String,
+        userInitiated: Boolean,
+        outcome: FetchOutcome,
+    ) {
         val info = outcome.info
         if (info == null) {
             if (userInitiated) {
-                report(activity, outcome.error ?: "Update check failed")
+                val raw = outcome.error.orEmpty()
+                report(
+                    activity,
+                    if (raw.isBlank()) "Couldn't check for updates — try again"
+                    else ErrorText.human(raw).ifBlank { "Couldn't check for updates — try again" },
+                )
             }
             return
         }
@@ -235,7 +271,7 @@ object UpdateChecker {
     }
 
     /** Compares dotted numeric version strings, e.g. "1.10" > "1.9". */
-    private fun isNewer(newer: String, older: String): Boolean {
+    internal fun isNewer(newer: String, older: String): Boolean {
         val a = newer.split(".").mapNotNull { it.toIntOrNull() }
         val b = older.split(".").mapNotNull { it.toIntOrNull() }
         val len = maxOf(a.size, b.size)

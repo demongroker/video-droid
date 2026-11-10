@@ -33,6 +33,13 @@ object ErrorText {
             m.contains("incomplete") || m.contains("connection dropped") ->
                 "Connection dropped"
             m.contains("no space") || m.contains("enospc") -> "Not enough free space"
+            // The updater's field bug: "android.os.NetworkOnMainThreadException" shown to a human.
+            m.contains("networkonmainthread") -> "Couldn't check for updates — try again"
+            m.contains("unknownhost") || m.contains("unable to resolve host") ||
+                m.contains("no address associated") -> "No connection — check your network"
+            m.contains("connectexception") || m.contains("connection refused") ||
+                m.contains("failed to connect") -> "Couldn't connect — try again"
+            m.contains("ssl") || m.contains("certificate") -> "Secure connection failed"
             m.contains("timeout") || m.contains("timed out") -> "Timed out"
             else -> raw.trim().ifEmpty { "Download failed" }
         }

@@ -2,47 +2,32 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
-## 2.3.7 (versionCode 94)
+## 2.4.1 (versionCode 96)
 
-Field log from the phone (Xiaomi 2510DPC44G, Android 16) — the last fix pass before 2.4.0.
+### "GitHub: NetworkOnMainThreadException" — the updater never worked
+The screen recording showed a toast with that exception after closing the Changelog, so the
+in-app update check failed every single time.
 
-### Ghost notification
-After a duplicate skip and a cancel the shade kept showing
-"Downloading 1 · Waiting for connection… (resumes automatically)" with nothing running.
+- **The cause was one line**: `UpdateChecker.check()` called a blocking HTTP request on the
+  caller's thread — the UI thread — from both the launch check and About → Check for updates.
+  Android forbids that and throws `NetworkOnMainThreadException` before the request is made.
+- **Fixed**: the whole fetch now runs on a dedicated background thread and only the result is
+  posted to the UI. Nothing else about the flow changed: same GitHub lookup, same fail-closed
+  signature check, same install prompt.
+- **Errors are readable**: the updater's failures go through `ErrorText`, so the owner sees
+  "Couldn't check for updates — try again" instead of an exception class name. The raw exception
+  goes to the local non-fatal crash log, which is where diagnostics belong.
+- **StrictMode in debug builds only** (`detectNetwork`, `detectDiskReads`, `penaltyLog`): the
+  next main-thread network or disk touch is logged the first time it happens instead of reaching
+  the phone. Release builds are unaffected.
+- **The in-app Changelog is now generated from `CHANGELOG.md` at every build** (Gradle
+  `syncChangelog` before `preBuild`), so it can never again stop at an old version — the viewer
+  was showing 2.3.6 while the app was on 2.4.x. `ChangelogAssetTest` fails the build if the
+  bundled copy drifts behind the app version.
+- Tests: `UpdateFlowTest` (newer/same/older comparisons, tag normalisation, plain-English
+  failure text, no dialog when there is no release) and `ChangelogAssetTest`.
 
-- The notification is now derived from the queue through one object (`NotificationState`): no
-  in-flight and no waiting rows means no notification at all, and the card is removed.
-- `publishGlobal()` refuses to post when the queue holds nothing runnable, so a late progress
-  update can no longer resurrect a card the service already removed.
-- "Waiting for connection" is only claimed when ConnectivityManager itself reports no internet
-  — a Wi-Fi handover fires `onLost` while the phone is still online.
-- Launch reconciliation: if the process died with active work but an empty queue, the residual
-  WorkManager job is cancelled and the notification cleared on the next start.
-- Tests: `NotificationStateTest` (skip, cancel, Wi-Fi drop, queue counting, reconcile matrix).
 
-### Page fallback picked the wrong video
-The static-page fallback downloaded a 5 MB CDN clip (an ad) instead of the video. Candidates are
-now ranked by `CandidatePicker`: clips under 3 MB or 30 s are ignored unless they are the only
-candidate, the page's own host wins over a bigger foreign file, and the largest size then the
-longest duration decide the rest. `CandidatePickerTest` covers each rule. (The full "Scan page for
-videos" picker with thumbnails stays in 2.4.0.)
-
-### Also in this build (from the 2.4.0 line, shipped early)
-- Duplicate check **before** the download: canonical host+path keys, "Already in library" with
-  "Download again anyway", SHA-256 still checked afterwards.
-- Human-readable failures ("This post has no video", "This video is gone", …) with Retry/Remove
-  in the Queue; raw errors stay in the log.
-- Queue rows say "Waiting for connection" when offline and "Queued" instead of a bare 0%.
-- No more "duration: not reached" line.
-- Design refresh: AMOLED palette, 8dp grid + type scale (`dimens.xml`), 16dp corners, adaptive
-  icon with a monochrome layer.
-- About screen (version, updates, changelog, GitHub, licences, crash logs).
-- Library: 2-column grid, List/Grid toggle, purple shimmer placeholder, middle ellipsis.
-- Play in Vela, Quick Settings "Clipboard link" tile, Material You toggle.
-- FLAG_SECURE now also covers dialogs and bottom sheets.
-- Correct plurals ("1 video", "2 videos").
-
-## 2.4.0 (versionCode 95)
 
 ### Audio only, subtitles, and logs that can be read
 
@@ -105,6 +90,61 @@ Still to come (not in 2.4.0): audio-only downloads with cover art, subtitle down
 with a language choice, drag-to-reorder in the queue, and the quality picker moving from chips
 into a bottom sheet. Those touch the download pipeline and need device verification before they
 ship.
+
+## 2.4.0 (versionCode 95)
+
+### Audio only, subtitles, and logs that can be read
+
+- **Audio only** (Settings): the next jobs fetch the best audio stream — m4a first, then opus,
+  then whatever the site offers — with no video pipeline. Files are named
+  `<title>_<date>_audio.<ext>` and saved as `audio/*`, so the Library badge and Play in Vela do
+  the right thing. MP3 conversion deliberately not included.
+- **Subtitles** (Settings): off · auto · all, plus a preferred language (device language first,
+  English fallback). Embedded when the container allows it, otherwise a `.srt` is saved beside
+  the file. Never uploaded.
+- **Per-job log sections**: parallel jobs no longer interleave in the copied log — one block per
+  job (short id, host only, start, end, result, then that job's lines), all redacted.
+- Tests: `SubtitlePrefsTest`, `JobLogTest`.
+
+## 2.3.7 (versionCode 94)
+
+Field log from the phone (Xiaomi 2510DPC44G, Android 16) — the last fix pass before 2.4.0.
+
+### Ghost notification
+After a duplicate skip and a cancel the shade kept showing
+"Downloading 1 · Waiting for connection… (resumes automatically)" with nothing running.
+
+- The notification is now derived from the queue through one object (`NotificationState`): no
+  in-flight and no waiting rows means no notification at all, and the card is removed.
+- `publishGlobal()` refuses to post when the queue holds nothing runnable, so a late progress
+  update can no longer resurrect a card the service already removed.
+- "Waiting for connection" is only claimed when ConnectivityManager itself reports no internet
+  — a Wi-Fi handover fires `onLost` while the phone is still online.
+- Launch reconciliation: if the process died with active work but an empty queue, the residual
+  WorkManager job is cancelled and the notification cleared on the next start.
+- Tests: `NotificationStateTest` (skip, cancel, Wi-Fi drop, queue counting, reconcile matrix).
+
+### Page fallback picked the wrong video
+The static-page fallback downloaded a 5 MB CDN clip (an ad) instead of the video. Candidates are
+now ranked by `CandidatePicker`: clips under 3 MB or 30 s are ignored unless they are the only
+candidate, the page's own host wins over a bigger foreign file, and the largest size then the
+longest duration decide the rest. `CandidatePickerTest` covers each rule. (The full "Scan page for
+videos" picker with thumbnails stays in 2.4.0.)
+
+### Also in this build (from the 2.4.0 line, shipped early)
+- Duplicate check **before** the download: canonical host+path keys, "Already in library" with
+  "Download again anyway", SHA-256 still checked afterwards.
+- Human-readable failures ("This post has no video", "This video is gone", …) with Retry/Remove
+  in the Queue; raw errors stay in the log.
+- Queue rows say "Waiting for connection" when offline and "Queued" instead of a bare 0%.
+- No more "duration: not reached" line.
+- Design refresh: AMOLED palette, 8dp grid + type scale (`dimens.xml`), 16dp corners, adaptive
+  icon with a monochrome layer.
+- About screen (version, updates, changelog, GitHub, licences, crash logs).
+- Library: 2-column grid, List/Grid toggle, purple shimmer placeholder, middle ellipsis.
+- Play in Vela, Quick Settings "Clipboard link" tile, Material You toggle.
+- FLAG_SECURE now also covers dialogs and bottom sheets.
+- Correct plurals ("1 video", "2 videos").
 
 ## 2.3.6 (versionCode 92)
 
@@ -1041,14 +1081,3 @@ Phase 1 — hardening, CI and size.
 - Remember last download quality
 - Tap Done to open the file
 - Same one screen: paste → quality → Download
-
-## 1.3 and earlier
-
-- 1.3: Login X, cookies stay on the phone
-- 1.2: Chaquopy init, private updater, arm64-only
-- 1.1: export-height parse + pad centering
-- 1.0: on-device yt-dlp + FFmpeg paste/share downloader
-
-## Later
-
-- Changelog screen inside the app

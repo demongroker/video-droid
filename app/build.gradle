@@ -6,6 +6,22 @@ plugins {
     id 'kotlin-kapt'
 }
 
+// Keep the in-app changelog identical to the repo one at every build. The viewer topped out
+// at an old version because the asset was a hand-copied snapshot.
+tasks.register('syncChangelog') {
+    doLast {
+        def src = rootProject.file('CHANGELOG.md')
+        def dst = file('src/main/assets/CHANGELOG.md')
+        if (src.exists()) {
+            dst.parentFile.mkdirs()
+            dst.text = src.text
+        }
+    }
+}
+tasks.configureEach { t ->
+    if (t.name == 'preBuild') t.dependsOn 'syncChangelog'
+}
+
 android {
     namespace 'com.xerxes.videodroid'
     compileSdk 36
@@ -14,8 +30,8 @@ android {
         applicationId "com.xerxes.videodroid"
         minSdk 24
         targetSdk 36
-        versionCode 95
-        versionName "2.4.0"
+        versionCode 96
+        versionName "2.4.1"
 
         // Screenshots for the README need a build that is not FLAG_SECURE. The flag defaults
         // to ON everywhere; only the screenshot job passes -PnoSecureScreens=true, so a

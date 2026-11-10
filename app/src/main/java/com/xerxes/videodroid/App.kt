@@ -15,6 +15,21 @@ class App : PyApplication() {
 
         // Catch anything that kills the process, so the next launch can show
         // the stack trace instead of just "keeps stopping".
+        // Debug builds only: shout in the log if anything touches the network or the disk on
+        // the main thread. This is what would have caught the NetworkOnMainThreadException in
+        // the updater on the first run. Log only — never a crash in the owner's hands.
+        if (BuildConfig.DEBUG) {
+            runCatching {
+                android.os.StrictMode.setThreadPolicy(
+                    android.os.StrictMode.ThreadPolicy.Builder()
+                        .detectNetwork()
+                        .detectDiskReads()
+                        .penaltyLog()
+                        .build(),
+                )
+            }
+        }
+
         CrashHandler.install(this)
 
         // Optional Material You: applies before the first activity inflates.
