@@ -2,7 +2,37 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
-## 2.4.1 (versionCode 96)
+## 2.5.0 (versionCode 97)
+
+### Scan page for videos
+
+When a site is not supported, the app used to guess one media URL and hope. Now it can show you
+what the page actually offers and let you pick.
+
+- **Download tab → "Scan page for videos"** (and the same flow from a shared link): the page is
+  fetched once, then parsed for `<video>`/`<source>`, `og:video`/`twitter:player:stream`, JSON-LD
+  `VideoObject` (including its `duration` and `contentSize`), bare `.mp4/.webm/.m3u8/.mpd` URLs in
+  markup and inline scripts, and same-origin iframes one level deep.
+- **Ranked, not guessed**: `CandidatePicker` orders the results — the page's own host beats a
+  foreign CDN, then the largest size, then the longest duration. Clips under 3 MB or 30 s only win
+  when they are the only candidate, which is what stopped a 5 MB ad being downloaded instead of
+  the video.
+- **A picker that shows its work**: bottom sheet with one row per candidate (host, type, size,
+  duration, "this site" marker), the best preselected, several selectable. Nothing is downloaded
+  until you confirm, and every pick still passes the saved-link duplicate check before transfer.
+- **DRM is respected, never bypassed**: streams with encryption markers (Widevine/PlayReady/
+  FairPlay/ClearKey/`#EXT-X-KEY`/*encrypted*) are listed greyed out as "Protected — this video
+  can't be saved".
+- **Sizes come from HEAD/range requests only**, on a background thread, with an 8 s timeout. No
+  body is fetched during the scan and no cookie is attached.
+- **Generic by design**: no site names anywhere in the code, no per-site extractor, no login or
+  paywall circumvention.
+- Tests: `PageScannerTest` (10 cases) over hand-written fixtures in
+  `src/test/resources/fixtures` — plain `<video>`, `og:video`, JSON-LD with duration/size, HLS in
+  an inline script, same-origin iframe, ad-clip-plus-main, DRM page, no-video page, ISO-8601
+  durations, and relative-URL resolution.
+
+
 
 ### "GitHub: NetworkOnMainThreadException" — the updater never worked
 The screen recording showed a toast with that exception after closing the Changelog, so the

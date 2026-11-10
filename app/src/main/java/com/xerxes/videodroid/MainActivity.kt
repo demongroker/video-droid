@@ -35,6 +35,7 @@ import com.xerxes.videodroid.ui.Insets
 import com.xerxes.videodroid.ui.MainUiState
 import com.xerxes.videodroid.ui.MainViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -45,7 +46,7 @@ import androidx.core.content.ContextCompat
 import java.util.regex.Pattern
 
 class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFragment.Listener,
-    OptionsSheetFragment.Listener {
+    OptionsSheetFragment.Listener, ScanSheetFragment.Listener {
 
     private lateinit var urlInput: EditText
     private lateinit var dlQuality: Spinner
@@ -114,6 +115,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         presetsExpanded = findViewById(R.id.presetsExpanded)
         hideJobProgress()
         NavHelper.wire(this, R.id.tab_download)
+
+        findViewById<Button>(R.id.scanPageButton).setOnClickListener {
+            scanPageForVideos()
+        }
 
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -499,6 +504,70 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         }
 
         launchJob(url)
+    }
+
+    /**
+     * Generic page scan: fetch once, parse, probe sizes off the UI thread, let the owner choose.
+     * Nothing downloads until a row is confirmed, and every pick still passes the saved-link
+     * duplicate gate before it reaches the queue.
+     */
+    private fun scanPageForVideos() {
+        val url = urlInput.text.toString().trim()
+        if (!ClipboardLink.looksDownloadable(url)) {
+            statusText = "Paste a page link first"
+            return
+        }
+        statusText = "Scanning page…"
+        Haptics.tick(this)
+        lifecycleScope.launch {
+            val page = withContext(Dispatchers.IO) {
+                runCatching { StaticPageFetcher.fetch(this@MainActivity, url) }.getOrNull()
+            }
+            if (page == null || page.html.isBlank()) {
+                statusText = ErrorText.human(page?.error ?: "Couldn't load that page")
+                return@launch
+            }
+            var found = withContext(Dispatchers.Default) {
+                PageScanner.scan(page.html, page.finalUrl.ifBlank { url })
+            }
+            if (found.isEmpty()) {
+                statusText = "No videos found on that page"
+                return@launch
+            }
+            // Size probe: HEAD/range only, and only for candidates the page didn't describe.
+            found = withContext(Dispatchers.IO) {
+                found.map { c ->
+                    if (c.sizeBytes > 0 || c.kind == PageScanner.Kind.IFRAME ||
+                        c.kind == PageScanner.Kind.UNKNOWN
+                    ) {
+                        c
+                    } else {
+                        c.copy(sizeBytes = MediaProbe.sizeOf(c.url))
+                    }
+                }
+            }
+            statusText = "ready"
+            ScanSheetFragment.newInstance(found)
+                .show(supportFragmentManager, ScanSheetFragment.TAG)
+        }
+    }
+
+    override fun onScanPicked(urls: List<String>) {
+        var queued = 0
+        var skipped = 0
+        for (u in urls) {
+            if (SavedLinkIndex.contains(this, u)) {
+                skipped++
+                continue
+            }
+            launchJob(u)
+            queued++
+        }
+        statusText = when {
+            queued > 0 && skipped > 0 -> "Queued $queued · skipped $skipped already saved"
+            queued > 0 -> "Queued $queued"
+            else -> "Already in library"
+        }
     }
 
     /** "Already in library" before a byte is transferred, with an explicit way through. */

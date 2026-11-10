@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/vd_surface"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/space_5"
+    android:paddingTop="@dimen/space_4"
+    android:paddingEnd="@dimen/space_5"
+    android:paddingBottom="@dimen/space_5">
+
+    <TextView
+        style="@style/Text.VideoDroid.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Videos on this page" />
+
+    <TextView
+        android:id="@+id/scanHint"
+        style="@style/Text.VideoDroid.Label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_1"
+        android:text="Pick what to download" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_3"
+        android:maxHeight="360dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/scanRows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/scanDownload"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/button_height"
+        android:layout_marginTop="@dimen/space_3"
+        android:text="Download selected"
+        android:textAllCaps="false"
+        app:cornerRadius="@dimen/corner_card" />
+</LinearLayout>

@@ -403,6 +403,18 @@
                 app:cornerRadius="16dp"
                 app:strokeColor="@color/vd_outline" />
 
+            <!-- Generic page scan: offers the videos found on a page instead of guessing. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/scanPageButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="Scan page for videos"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_violet_soft" />
+
             <!--
                 Social presets: one sideways-scrolling row of chips (Stage 1). No toggle, no
                 "More" section — everything advanced lives in the Options sheet and Settings.
