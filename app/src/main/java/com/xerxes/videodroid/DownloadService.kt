@@ -135,6 +135,7 @@ class DownloadService : Service() {
                         trimStart = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TSTART, 1)),
                         trimEnd = FormatOptions.clampTrimSeconds(intent.getIntExtra(EXTRA_TEND, 1)),
                         exportEnabled = intent.getBooleanExtra(EXTRA_EXPORT, true),
+                        audioOnly = intent.getBooleanExtra(EXTRA_AUDIO, false),
                     )
                     val added = DownloadQueue.enqueue(
                         applicationContext,
@@ -629,6 +630,7 @@ class DownloadService : Service() {
         const val EXTRA_TSTART = "tstart"
         const val EXTRA_TEND = "tend"
         const val EXTRA_EXPORT = "export"
+        const val EXTRA_AUDIO = "audio_only"
         const val EXTRA_QV = "qv"
         const val EXTRA_LOCAL_PATH = "localPath"
         private const val CHANNEL_ID = "vd_dl"
@@ -648,6 +650,7 @@ class DownloadService : Service() {
                 putExtra(EXTRA_TSTART, opts.trimStart)
                 putExtra(EXTRA_TEND, opts.trimEnd)
                 putExtra(EXTRA_EXPORT, opts.exportEnabled)
+                putExtra(EXTRA_AUDIO, opts.audioOnly)
                 putExtra(EXTRA_QV, opts.crf)
                 putExtra(EXTRA_LOCAL_PATH, localPath)
             }

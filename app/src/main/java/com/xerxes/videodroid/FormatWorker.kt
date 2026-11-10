@@ -32,6 +32,8 @@ data class FormatOptions(
     val trimStart: Int = 1,
     val trimEnd: Int = 1,
     val exportEnabled: Boolean = true,
+    /** Audio only: best m4a/opus stream, no video pipeline, saved as an audio file. */
+    val audioOnly: Boolean = false,
 ) {
     fun aspectLabel(): String {
         val a = aspect.trim()
@@ -313,10 +315,12 @@ object FormatWorker {
                 var usedPath = "native"
                 val result = try {
                     val native = runCatching {
+                        val subs = SubtitlePrefs.resolve(context)
                         dlModule.callAttr(
                             "download", url, opts.dlQuality, work.absolutePath,
                             "source", cookiePath, opts.exportEnabled,
                             progressCb, null, null, null, false, cancelToken,
+                            opts.audioOnly, subs.mode, subs.language,
                         ).toString()
                     }
                     native.getOrElse { first ->
@@ -490,6 +494,7 @@ object FormatWorker {
             // `?s=09` tail, and the fallback path returns bare tweet text where the native path
             // returned "<account>_-_<text>-[<id>]", so an exact name match alone is not enough:
             // match on the tweet's status tag first, then on the exact file name.
+            JobDiag.noteUrl(url)
             val nameTitle = titleWithTweetId(url, title)
 
             fun fileNameFor(ext: String): String = fileName(opts, ext, nameTitle, url)
@@ -1082,6 +1087,8 @@ object FormatWorker {
     }
 
     fun qualityTag(opts: FormatOptions): String {
+        // An audio job has no resolution to advertise.
+        if (opts.audioOnly) return "audio"
         val q = opts.dlQuality.trim()
         if (q.equals("best", ignoreCase = true)) return "best"
         val digits = q.filter { it.isDigit() }
@@ -1312,6 +1319,12 @@ object FormatWorker {
 
     private fun mimeForExt(ext: String): String = when (ext.lowercase()) {
         "mp4", "m4v" -> "video/mp4"
+        "m4a" -> "audio/mp4"
+        "opus", "ogg", "oga" -> "audio/ogg"
+        "mp3" -> "audio/mpeg"
+        "aac" -> "audio/aac"
+        "flac" -> "audio/flac"
+        "wav" -> "audio/wav"
         "webm" -> "video/webm"
         "mkv" -> "video/x-matroska"
         "mov" -> "video/quicktime"

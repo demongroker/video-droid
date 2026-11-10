@@ -373,6 +373,7 @@ object DownloadQueue {
                             trimStart = FormatOptions.clampTrimSeconds(o.optInt("tstart", 1)),
                             trimEnd = FormatOptions.clampTrimSeconds(o.optInt("tend", 1)),
                             exportEnabled = o.optBoolean("export", true),
+                            audioOnly = o.optBoolean("audio", false),
                         ),
                         localPath = o.optString("local", ""),
                         progress = o.optInt("progress", 0),
@@ -429,6 +430,7 @@ object DownloadQueue {
                     put("tstart", j.opts.trimStart)
                     put("tend", j.opts.trimEnd)
                     put("export", j.opts.exportEnabled)
+                    put("audio", j.opts.audioOnly)
                     put("local", j.localPath)
                     put("progress", j.progress)
                     put("partial", j.partialPath)

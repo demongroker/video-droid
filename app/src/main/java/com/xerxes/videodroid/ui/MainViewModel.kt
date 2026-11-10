@@ -29,9 +29,11 @@ data class JobSettings(
     val trimOn: Boolean,
     val trimStart: Int,
     val trimEnd: Int,
+    /** Audio-only job: no video pipeline, saved as m4a/opus. */
+    val audioOnly: Boolean = false,
 ) {
     fun toFormatOptions(): FormatOptions =
-        FormatOptions(quality, 0, aspect, 0, 3, trimOn, trimStart, trimEnd, exportOn)
+        FormatOptions(quality, 0, aspect, 0, 3, trimOn, trimStart, trimEnd, exportOn, audioOnly)
 }
 
 /** Everything the screen renders. Immutable so the Activity can diff cheaply. */

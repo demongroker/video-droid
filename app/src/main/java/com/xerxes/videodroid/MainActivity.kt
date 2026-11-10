@@ -561,7 +561,10 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
         vm.startJob(
             url = url,
             localPath = localPath,
-            settings = JobSettings(dlQ, exportOn, aspect, trimOn, tStart, tEnd),
+            settings = JobSettings(
+                dlQ, exportOn, aspect, trimOn, tStart, tEnd,
+                audioOnly = prefsNow.getBoolean("audio_only", false),
+            ),
         )
     }
 

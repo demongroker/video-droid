@@ -42,7 +42,35 @@ videos" picker with thumbnails stays in 2.4.0.)
 - FLAG_SECURE now also covers dialogs and bottom sheets.
 - Correct plurals ("1 video", "2 videos").
 
-## 2.4.0 (versionCode 93)
+## 2.4.0 (versionCode 95)
+
+### Audio only, subtitles, and logs that can be read
+
+- **Audio only.** A new setting (Settings → Audio only) makes the next jobs fetch the best audio
+  stream — m4a first, then opus, then whatever the site offers — with no video pipeline at all.
+  Files are named `<title>_<date>_audio.<ext>` and saved as `audio/*`, so the Library badge and
+  "Play in Vela" both do the right thing. MP3 conversion is deliberately not included: it would
+  add nothing without a new encoder path, and ffmpeg-kit already ships.
+- **Subtitles.** Settings → Download subtitles cycles **off · auto · all**, and Settings →
+  Subtitle language picks the preferred tag (device language by default, then English). yt-dlp
+  embeds the tracks when the container allows it (mp4/mkv) and leaves a `.srt` beside the file
+  when it does not. Nothing is uploaded.
+- **Per-job log sections.** Parallel jobs no longer interleave in the copied log: each job gets
+  its own block — short id, host only (never a full URL), start, end, result — followed by that
+  job's lines. Everything still passes through the redactor, so no query string or token can end
+  up in a log that gets pasted into a chat.
+- Tests: `SubtitlePrefsTest` (mode cycle, language normalisation, device fallback) and
+  `JobLogTest` (host-only extraction, section layout, redaction, trimming).
+
+### Earlier in the 2.4.0 line (shipped in 2.3.7 and before)
+AMOLED design system with an 8dp grid and one type scale · adaptive icon with a monochrome
+layer · About screen · Library 2-column grid, list/grid toggle, shimmer placeholder and middle
+ellipsis · Play in Vela · Quick Settings "Clipboard link" tile · Material You toggle · FLAG_SECURE
+on dialogs and sheets · correct plurals · pre-download duplicate gate · human-readable errors with
+Retry/Remove · queue rows that say "Waiting for connection" / "Queued" · no more
+"duration: not reached" · ghost notification fixed · page fallback picks the real video.
+
+
 
 ### Phase 2 "Beautiful" — first slice
 Design foundation and the screens that benefit most. The downloader-side upgrades (audio-only,

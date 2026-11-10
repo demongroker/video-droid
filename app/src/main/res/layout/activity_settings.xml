@@ -233,6 +233,36 @@
                 android:textColor="@color/vd_text_dim" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/audioOnlyButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Audio only"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/subtitlesButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Download subtitles"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/subtitleLangButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Subtitle language"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearanceButton"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="match_parent"

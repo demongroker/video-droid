@@ -63,6 +63,11 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
 
+        findViewById<Button>(R.id.audioOnlyButton).setOnClickListener { toggleAudioOnly() }
+        findViewById<Button>(R.id.subtitlesButton).setOnClickListener { cycleSubtitles() }
+        findViewById<Button>(R.id.subtitleLangButton).setOnClickListener { pickSubtitleLanguage() }
+        refreshMediaRows()
+
         findViewById<Button>(R.id.aboutButton).setOnClickListener {
             runCatching { startActivity(Intent(this, AboutActivity::class.java)) }
         }
@@ -78,6 +83,71 @@ class SettingsActivity : AppCompatActivity() {
         versionLabel.text = "VideoDroid ${installedVersion()}"
         versionLabel.setOnClickListener { startActivity(Intent(this, AboutActivity::class.java)) }
         refreshAppearanceRow()
+    }
+
+    // ---- audio only + subtitles (2.4.0) ----------------------------------------------
+
+    private fun audioOnlyPref(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_AUDIO_ONLY, false)
+
+    private fun refreshMediaRows() {
+        findViewById<Button>(R.id.audioOnlyButton)?.text =
+            if (audioOnlyPref()) "Audio only: on — next jobs save sound only"
+            else "Audio only: off"
+        findViewById<Button>(R.id.subtitlesButton)?.text = SubtitlePrefs.label(this)
+        findViewById<Button>(R.id.subtitleLangButton)?.text =
+            "Subtitle language: ${SubtitlePrefs.language(this)}"
+        findViewById<Button>(R.id.subtitleLangButton)?.isEnabled =
+            SubtitlePrefs.mode(this) != "off"
+    }
+
+    private fun toggleAudioOnly() {
+        val on = !audioOnlyPref()
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_AUDIO_ONLY, on).apply()
+        Haptics.tick(this)
+        toast(if (on) "Audio only on — video jobs stop until you turn it off" else "Audio only off")
+        refreshMediaRows()
+    }
+
+    private fun cycleSubtitles() {
+        val next = when (SubtitlePrefs.mode(this)) {
+            "off" -> "auto"
+            "auto" -> "all"
+            else -> "off"
+        }
+        SubtitlePrefs.setMode(this, next)
+        Haptics.tick(this)
+        toast(SubtitlePrefs.label(this))
+        refreshMediaRows()
+    }
+
+    private fun pickSubtitleLanguage() {
+        val languages = listOf(
+            "device" to SubtitlePrefs.deviceLanguage(),
+            "en" to "en",
+            "id" to "id",
+            "es" to "es",
+            "fr" to "fr",
+            "de" to "de",
+            "pt" to "pt",
+            "ar" to "ar",
+            "hi" to "hi",
+            "zh" to "zh",
+            "ja" to "ja",
+            "ko" to "ko",
+            "ru" to "ru",
+        )
+        val labels = languages.map { (label, tag) ->
+            if (label == "device") "Device default ($tag)" else tag
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Subtitle language")
+            .setItems(labels) { _, which ->
+                SubtitlePrefs.setLanguage(this, languages[which].second)
+                refreshMediaRows()
+            }
+            .show()
+            .also { d -> SecureScreen.secure(d) }
     }
 
     // ---- appearance (Material You opt-in) --------------------------------------------
@@ -298,7 +368,9 @@ class SettingsActivity : AppCompatActivity() {
             lines.add("saved job log:")
             lines.add(saved)
         }
-        val blob = JobDiag.redact(lines.joinToString("\n"))
+        // Grouped per job: id, host only, start/end, result, then that job's own lines.
+        val grouped = JobLog.format(JobDiag.jobSections())
+        val blob = JobDiag.redact(lines.joinToString("\n") + "\n\n" + grouped)
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("videodroid-log", blob))
         toast("Log copied")
@@ -312,6 +384,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private companion object {
         const val PREFS = "videodroid"
+        const val KEY_AUDIO_ONLY = "audio_only"
         const val KEY_QUALITY = "last_quality"
         const val KEY_EXPORT_ON = "export_on"
         const val KEY_ASPECT_MODE = "last_aspect_mode"

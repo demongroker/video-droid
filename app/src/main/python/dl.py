@@ -571,8 +571,19 @@ def _classify_twitter_error(err, had_cookies):
 def download(url, quality, outdir, filename="source", cookiefile=None,
              export_enabled=False, progress=None, referer=None,
              user_agent=None, page_title=None, force_generic=False,
-             cancel_check=None):
-    if export_enabled:
+             cancel_check=None, audio_only=False, subs_mode="off", subs_lang="en"):
+    """Download one item.
+
+    audio_only  -> take the best audio stream (m4a, else opus, else whatever exists) and
+                   never touch the video pipeline; the caller saves it as an audio file.
+    subs_mode   -> "off" | "auto" | "all". "auto" asks the site for its own/auto-generated
+                    tracks in subtitleslangs; "all" asks for every language the site offers.
+    subs_lang   -> preferred language tag (falls back to English inside the options).
+    """
+    if audio_only:
+        # Audio only: m4a first (plays everywhere), then opus, then anything.
+        fmt = "bestaudio[ext=m4a]/bestaudio[ext=opus]/bestaudio/best"
+    elif export_enabled:
         # Export ON: H.264-REQUIRED, no any-codec fallback. The phone's ffmpeg
         # build cannot decode HEVC at all (rc=69 invalid data even in software),
         # so never download HEVC here — fail fast instead (1.6.25).
@@ -602,6 +613,14 @@ def download(url, quality, outdir, filename="source", cookiefile=None,
     opts = {
         "format": fmt,
         "outtmpl": os.path.join(outdir, filename + ".%(ext)s"),
+        # Subtitles: yt-dlp embeds them during post-processing when the container allows it
+        # (mp4/mkv), and leaves a .srt next to the file when it does not. Nothing is uploaded.
+        "writesubtitles": subs_mode in ("all", "auto"),
+        "writeautomaticsub": subs_mode in ("all", "auto"),
+        "subtitleslangs": (["all"] if subs_mode == "all" else [subs_lang or "en"]),
+        "subtitlesformat": "srt/best",
+        "postprocessors": ([{"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False}]
+                           if subs_mode in ("all", "auto") and not audio_only else []),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,

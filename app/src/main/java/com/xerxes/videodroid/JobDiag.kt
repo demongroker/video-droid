@@ -41,6 +41,11 @@ object JobDiag {
         @Volatile var exception: String = ""
         @Volatile var durKnown: Boolean? = null
         @Volatile var durValue: Double = 0.0
+        // For the grouped per-job log (2.4.0): which link, when, and how it ended.
+        @Volatile var url: String = ""
+        @Volatile var started: String = ""
+        @Volatile var ended: String = ""
+        @Volatile var result: String = ""
     }
 
     private val jobMeta = java.util.concurrent.ConcurrentHashMap<String, Meta>()
@@ -80,6 +85,13 @@ object JobDiag {
             if (ring.isNotEmpty()) lastFinished = ring.toList()
             ring.clear()
             boundId.get()?.let { id -> jobRings.computeIfAbsent(id) { ArrayDeque(RING) }.clear() }
+        }
+        runCatching {
+            meta()?.let { m ->
+                m.started = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+                m.ended = ""
+                m.result = ""
+            }
         }
         lastFfmpegRc = ""
         lastFfmpegTail = ""
@@ -135,6 +147,11 @@ object JobDiag {
         meta()?.exception = lastException
     }
 
+    /** Called by the worker once it knows which link this job is for. */
+    fun noteUrl(url: String) {
+        runCatching { meta()?.let { if (it.url.isBlank()) it.url = url } }
+    }
+
     fun noteDuration(known: Boolean, value: Double) {
         durationKnown = known
         durationValue = value
@@ -145,6 +162,14 @@ object JobDiag {
     }
 
     fun finishJob() {
+        runCatching {
+            meta()?.let { m ->
+                m.ended = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+                m.result = if (m.exception.isNotBlank()) "failed: " + m.exception.take(80)
+                else if (m.ffmpegRc.isNotBlank() && m.ffmpegRc != "0") "ffmpeg rc=" + m.ffmpegRc
+                else "ok"
+            }
+        }
         synchronized(lock) {
             if (ring.isNotEmpty()) lastFinished = ring.toList()
         }
@@ -178,6 +203,32 @@ object JobDiag {
             }
             synchronized(lock) { f.appendText(block) }
         }
+    }
+
+    /**
+     * One entry per job that still has lines, newest first, for the grouped log (2.4.0).
+     * The id is the short queue id; the URL is kept raw here because [JobLog] reduces it to a
+     * host before anything is displayed or copied.
+     */
+    fun jobSections(): List<JobLog.Job> {
+        val out = ArrayList<JobLog.Job>()
+        val ids = jobRings.keys.toList().sortedDescending()
+        for (id in ids) {
+            val lines = jobRings[id]?.toList().orEmpty()
+            if (lines.isEmpty()) continue
+            val m = jobMeta[id]
+            out.add(
+                JobLog.Job(
+                    id = id,
+                    url = m?.url.orEmpty(),
+                    started = m?.started.orEmpty(),
+                    ended = m?.ended.orEmpty(),
+                    result = m?.result.orEmpty(),
+                    lines = lines,
+                ),
+            )
+        }
+        return out
     }
 
     /** The block written for the job that just ended. */
