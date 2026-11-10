@@ -14,8 +14,8 @@ android {
         applicationId "com.xerxes.videodroid"
         minSdk 24
         targetSdk 36
-        versionCode 93
-        versionName "2.4.0"
+        versionCode 94
+        versionName "2.3.7"
 
         // Screenshots for the README need a build that is not FLAG_SECURE. The flag defaults
         // to ON everywhere; only the screenshot job passes -PnoSecureScreens=true, so a

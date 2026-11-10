@@ -368,7 +368,22 @@ object FormatWorker {
                             }
 
                             var refererForDl = page.finalUrl
-                            var found = MediaUrlParser.pickBest(candidates)?.let { mediaUrl ->
+                            // Field bug: the fallback grabbed a 5 MB CDN ad instead of the
+                            // video. Rank candidates first (skip clips, prefer the page's own
+                            // host, then the largest) and only then fall back to pickBest().
+                            val pageHost = runCatching { java.net.URI(page.finalUrl).host.orEmpty() }
+                                .getOrDefault("")
+                            val ranked = CandidatePicker.choose(
+                                candidates.distinct().take(8).map { c ->
+                                    CandidatePicker.Candidate(
+                                        url = c,
+                                        sameHostAsPage = pageHost.isNotEmpty() && runCatching {
+                                            java.net.URI(c).host.orEmpty().endsWith(pageHost)
+                                        }.getOrDefault(false),
+                                    )
+                                },
+                            )?.url
+                            var found = (ranked ?: MediaUrlParser.pickBest(candidates))?.let { mediaUrl ->
                                 SniffedMedia(mediaUrl, page.title, page.finalUrl, PageSniffer.DESKTOP_UA)
                             }
                             if (found != null) usedPath = "static"

@@ -2,6 +2,46 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.3.7 (versionCode 94)
+
+Field log from the phone (Xiaomi 2510DPC44G, Android 16) — the last fix pass before 2.4.0.
+
+### Ghost notification
+After a duplicate skip and a cancel the shade kept showing
+"Downloading 1 · Waiting for connection… (resumes automatically)" with nothing running.
+
+- The notification is now derived from the queue through one object (`NotificationState`): no
+  in-flight and no waiting rows means no notification at all, and the card is removed.
+- `publishGlobal()` refuses to post when the queue holds nothing runnable, so a late progress
+  update can no longer resurrect a card the service already removed.
+- "Waiting for connection" is only claimed when ConnectivityManager itself reports no internet
+  — a Wi-Fi handover fires `onLost` while the phone is still online.
+- Launch reconciliation: if the process died with active work but an empty queue, the residual
+  WorkManager job is cancelled and the notification cleared on the next start.
+- Tests: `NotificationStateTest` (skip, cancel, Wi-Fi drop, queue counting, reconcile matrix).
+
+### Page fallback picked the wrong video
+The static-page fallback downloaded a 5 MB CDN clip (an ad) instead of the video. Candidates are
+now ranked by `CandidatePicker`: clips under 3 MB or 30 s are ignored unless they are the only
+candidate, the page's own host wins over a bigger foreign file, and the largest size then the
+longest duration decide the rest. `CandidatePickerTest` covers each rule. (The full "Scan page for
+videos" picker with thumbnails stays in 2.4.0.)
+
+### Also in this build (from the 2.4.0 line, shipped early)
+- Duplicate check **before** the download: canonical host+path keys, "Already in library" with
+  "Download again anyway", SHA-256 still checked afterwards.
+- Human-readable failures ("This post has no video", "This video is gone", …) with Retry/Remove
+  in the Queue; raw errors stay in the log.
+- Queue rows say "Waiting for connection" when offline and "Queued" instead of a bare 0%.
+- No more "duration: not reached" line.
+- Design refresh: AMOLED palette, 8dp grid + type scale (`dimens.xml`), 16dp corners, adaptive
+  icon with a monochrome layer.
+- About screen (version, updates, changelog, GitHub, licences, crash logs).
+- Library: 2-column grid, List/Grid toggle, purple shimmer placeholder, middle ellipsis.
+- Play in Vela, Quick Settings "Clipboard link" tile, Material You toggle.
+- FLAG_SECURE now also covers dialogs and bottom sheets.
+- Correct plurals ("1 video", "2 videos").
+
 ## 2.4.0 (versionCode 93)
 
 ### Phase 2 "Beautiful" — first slice

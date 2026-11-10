@@ -250,6 +250,14 @@ class DownloadService : Service() {
         return DownloadQueue.waiting(applicationContext) > 0
     }
 
+    /** What ConnectivityManager says right now, not what the last callback said. */
+    private fun isOnlineNow(): Boolean = runCatching {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return@runCatching false
+        val net = cm.activeNetwork ?: return@runCatching false
+        val caps = cm.getNetworkCapabilities(net) ?: return@runCatching false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(false)
+
     private fun maybeStopWhenIdle() {
         synchronized(pumpLock) {
             if (workerThreads.isNotEmpty()) return
@@ -345,6 +353,14 @@ class DownloadService : Service() {
 
     /** Status that is not tied to one item (start/cancel messages). */
     private fun publishGlobal(jobLine: String) {
+        // A notification is a mirror of the queue. Posting after the queue emptied is exactly
+        // how a "Waiting for connection…" card outlived every job it referred to.
+        if (shuttingDown || !hasRunnableWork()) {
+            runCatching {
+                (getSystemService(NotificationManager::class.java))?.cancel(NOTIF_ID)
+            }
+            return
+        }
         lastJobLine = jobLine
         updateNotification(composeNotif(jobLine, summaryLine()))
         listener?.onStatus(jobLine)
@@ -444,7 +460,11 @@ class DownloadService : Service() {
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 networkLost = true
-                if (isRunning) publishGlobal("Waiting for connection… (resumes automatically)")
+                // Ask ConnectivityManager rather than trusting the callback: a Wi-Fi handover
+                // fires onLost while the phone is still perfectly online.
+                if (isRunning && !isOnlineNow()) {
+                    publishGlobal("Waiting for connection… (resumes automatically)")
+                }
                 startNetProbe()
             }
 
@@ -537,6 +557,26 @@ class DownloadService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Downloads", NotificationManager.IMPORTANCE_LOW)
         )
+    }
+
+    /** Launch-time reconciliation, reachable without starting the service. */
+    object Reconcile {
+        /**
+         * Launch-time truth pass: active work with an empty queue is a ghost, so cancel the
+         * residual work and remove the card. Called from Application.onCreate.
+         */
+        fun reconcile(ctx: android.content.Context) {
+            runCatching {
+                val runnable = DownloadQueue.inFlightIds().isNotEmpty() ||
+                    DownloadQueue.waiting(ctx) > 0
+                if (!runnable) {
+                    val nm = ctx.getSystemService(NotificationManager::class.java)
+                    nm?.cancel(NOTIF_ID)
+                    androidx.work.WorkManager.getInstance(ctx)
+                        .cancelUniqueWork(QueueResumeWorker.NAME)
+                }
+            }
+        }
     }
 
     companion object {
