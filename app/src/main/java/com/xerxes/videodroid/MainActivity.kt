@@ -489,7 +489,27 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             }
         }
 
+        // Field report: the same 425 MB video came down five times because the duplicate
+        // check only ran after the transfer. Check the saved-link index first and offer a
+        // deliberate override; the SHA-256 gate still runs afterwards.
+        if (SavedLinkIndex.contains(this, url)) {
+            Haptics.tick(this)
+            showAlreadyInLibrary(url)
+            return
+        }
+
         launchJob(url)
+    }
+
+    /** "Already in library" before a byte is transferred, with an explicit way through. */
+    private fun showAlreadyInLibrary(url: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Already in library")
+            .setMessage("This link is already saved on this phone.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Download again anyway") { _, _ -> launchJob(url) }
+            .show()
+            .also { d -> SecureScreen.secure(d) }
     }
 
     override fun onRequestPermissionsResult(

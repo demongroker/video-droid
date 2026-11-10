@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Design system constants. Everything on screen is built from this file plus colors.xml
+        and the type scale below — 8dp grid, 16dp corners, one spacing rhythm.
+    -->
+
+    <!-- 8dp spacing grid -->
+    <dimen name="space_1">4dp</dimen>
+    <dimen name="space_2">8dp</dimen>
+    <dimen name="space_3">12dp</dimen>
+    <dimen name="space_4">16dp</dimen>
+    <dimen name="space_5">20dp</dimen>
+    <dimen name="space_6">24dp</dimen>
+    <dimen name="space_8">32dp</dimen>
+    <dimen name="space_10">40dp</dimen>
+
+    <!-- Shape -->
+    <dimen name="corner_card">16dp</dimen>
+    <dimen name="corner_sheet">24dp</dimen>
+    <dimen name="corner_pill">18dp</dimen>
+    <dimen name="stroke_hairline">1dp</dimen>
+
+    <!-- Controls -->
+    <dimen name="button_height">54dp</dimen>
+    <dimen name="control_height">44dp</dimen>
+    <dimen name="icon_button">40dp</dimen>
+    <dimen name="thumb_small">56dp</dimen>
+    <dimen name="thumb_grid_min">112dp</dimen>
+    <dimen name="progress_height">6dp</dimen>
+
+    <!-- Type scale -->
+    <dimen name="text_display">26sp</dimen>
+    <dimen name="text_title">22sp</dimen>
+    <dimen name="text_headline">16sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_label">13sp</dimen>
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_micro">10sp</dimen>
+</resources>

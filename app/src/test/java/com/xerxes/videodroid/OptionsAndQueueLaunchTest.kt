@@ -133,7 +133,8 @@ class OptionsAndQueueLaunchTest {
         val title = holder!!.itemView.findViewById<TextView>(R.id.queueRowTitle).text.toString()
         val sub = holder.itemView.findViewById<TextView>(R.id.queueRowSub).text.toString()
         assertTrue("row should show the failure: $title / $sub", sub.startsWith("Failed"))
-        assertTrue("failure reason must be visible: $sub", sub.contains("HTTP 404"))
+        // Field report: a raw "HTTP 404" is not an answer. The row shows plain English now.
+        assertTrue("failure must be human-readable: $sub", sub.contains("This video is gone"))
 
         holder.itemView.performClick()
         shadowOf(Looper.getMainLooper()).idle()

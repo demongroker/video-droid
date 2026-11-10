@@ -200,13 +200,13 @@ object JobDiag {
             sb.append("opts: ").append(opts.statusDetail())
                 .append(" export=").append(opts.exportEnabled).append('\n')
         }
-        sb.append("duration: ").append(
-            when (durKnown) {
-                true -> "${durValue}s"
-                false -> "unknown (probe found none)"
-                null -> "not reached"
-            },
-        ).append('\n')
+        // No line at all when nothing was probed: the old placeholder printed on every entry
+        // and told nobody anything (field report: "duration: not reached" everywhere).
+        when (durKnown) {
+            true -> sb.append("duration: ").append(durValue).append("s\n")
+            false -> sb.append("duration: unknown (probe found none)\n")
+            null -> Unit
+        }
         sb.append("ffmpeg rc: ").append(rc.ifEmpty { "(none)" }).append('\n')
         if (tail.isNotBlank()) sb.append("ffmpeg tail: ").append(tail).append('\n')
         sb.append("exception: ").append(exc.ifEmpty { "(none)" }).append('\n')

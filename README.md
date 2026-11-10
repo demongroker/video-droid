@@ -5,7 +5,7 @@
 Phone-only Android video downloader. Paste or share a link, pick a quality, tap **Download**.
 yt-dlp and FFmpeg run on the device. No fetch farm, no account.
 
-Current release: **2.3.5** (versionCode 91).
+Current release: **2.4.0** (versionCode 93).
 
 ## Screens and controls
 
@@ -17,6 +17,7 @@ Keep this map current whenever a screen, control or gesture changes.
 | **Options sheet** | **Options** on the Download tab | Re-encode on device, aspect (Fill / Fit / Original — greyed out until re-encode is on), ratio, trim. This is the only place these exist. |
 | **Queue** | bottom bar | Every job with a thumbnail, its name, state · quality · live speed and ETA, a progress bar, and pause / resume / cancel. Failed rows get **Retry**. Empty state offers **Go to Download**. |
 | **Library** | bottom bar | Storage bar, **Find duplicates**, **Sort** (newest / largest / name), thumbnail grid with size and duration badges. Tap to play, long-press to select several: Share, Move, Delete. Optional fingerprint/PIN lock. |
+| **About** | Settings → About | Icon, version, check for updates, changelog, GitHub, licences, crash logs. |
 | **Settings** | gear on the Download tab | Simultaneous downloads, Battery, Log in to X, Clear login, Local video, My last link, Recommended settings, Lock the Library, Hide from Gallery, Update download engine, Copy log, Check update, Changelog. |
 | **Share sheet** | share a link from any app to VideoDroid | Queues immediately with the last preset. Any `text/*` share is accepted. |
 | **Clipboard banner** | open the app with a video link copied | "Download this?" with **Download** / **✕**. Never starts on its own. |

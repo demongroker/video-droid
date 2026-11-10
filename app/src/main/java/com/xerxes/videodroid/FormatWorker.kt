@@ -494,6 +494,7 @@ object FormatWorker {
                 }
                 val uri = saveToDownloads(context, src, name, mimeForExt(ext))
                 SavedHashIndex.remember(context, srcHash, mediaIdOf(uri))
+                SavedLinkIndex.remember(context, url)
                 if (!isPersistedSource(context, src)) src.delete()
                 if (uri == null) return FormatResult(false, "Could not save to Downloads")
                 emit("Saved")
@@ -709,6 +710,7 @@ object FormatWorker {
             }
             val uri = saveToDownloads(context, out, name)
             SavedHashIndex.remember(context, outHash, mediaIdOf(uri))
+            SavedLinkIndex.remember(context, url)
             if (uri == null) return FormatResult(false, "Could not save to Downloads")
             if (!isPersistedSource(context, src)) src.delete()
             out.delete(); if (remux.exists()) remux.delete()
@@ -774,7 +776,7 @@ object FormatWorker {
             return "Download incomplete — the connection dropped. Nothing was saved."
         }
         if (s.contains("unsupported url") || s.contains("unsupported site")) {
-            return "Unsupported site. Open page."
+            return ErrorText.human("unsupported site")
         }
         if (s.contains("404") || s.contains("not found")) {
             return "File gone (404)"

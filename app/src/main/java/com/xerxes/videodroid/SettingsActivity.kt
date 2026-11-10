@@ -63,9 +63,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
 
-        findViewById<Button>(R.id.crashLogsButton).setOnClickListener {
-            runCatching { startActivity(Intent(this, CrashLogActivity::class.java)) }
+        findViewById<Button>(R.id.aboutButton).setOnClickListener {
+            runCatching { startActivity(Intent(this, AboutActivity::class.java)) }
         }
+        findViewById<Button>(R.id.appearanceButton).setOnClickListener { toggleMaterialYou() }
         findViewById<Button>(R.id.engineUpdateButton).setOnClickListener { updateEngine() }
         refreshEngineRow()
 
@@ -74,38 +75,34 @@ class SettingsActivity : AppCompatActivity() {
         refreshPrivacyRows()
 
         val versionLabel = findViewById<android.widget.TextView>(R.id.settingsVersion)
-        versionLabel.text = "VideoDroid ${installedVersion()} · About"
-        wireAboutTapToCrash(versionLabel)
+        versionLabel.text = "VideoDroid ${installedVersion()}"
+        versionLabel.setOnClickListener { startActivity(Intent(this, AboutActivity::class.java)) }
+        refreshAppearanceRow()
     }
 
-    // ---- About: hidden crash trigger (debug builds only) ------------------------------
+    // ---- appearance (Material You opt-in) --------------------------------------------
 
-    private var versionTaps = 0
-
-    /**
-     * Seven taps on the version line force a crash so the log writer and the viewer can be
-     * exercised without waiting for a real bug. Compiled out of release builds: the whole body
-     * is behind [BuildConfig.DEBUG], which R8 folds to `false`.
-     */
-    private fun wireAboutTapToCrash(label: android.widget.TextView) {
-        if (!BuildConfig.DEBUG) return
-        label.setOnClickListener {
-            versionTaps++
-            val left = 7 - versionTaps
-            if (left in 1..4) toast("$left more tap${if (left == 1) "" else "s"}…")
-            if (versionTaps >= 7) {
-                versionTaps = 0
-                toasty("Crashing on purpose (debug build)")
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    throw RuntimeException("VideoDroid test crash — triggered from About")
-                }, 300)
-            }
+    private fun refreshAppearanceRow() {
+        val btn = findViewById<Button>(R.id.appearanceButton) ?: return
+        btn.text = if (Appearance.materialYouEnabled(this)) {
+            "Appearance: Material You"
+        } else {
+            "Appearance: VideoDroid (black + violet)"
         }
     }
 
-    private fun toasty(msg: String) {
-        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+    private fun toggleMaterialYou() {
+        val on = !Appearance.materialYouEnabled(this)
+        Appearance.setMaterialYou(this, on)
+        Haptics.tick(this)
+        toast(
+            if (on) "Material You on — reopen the app to apply"
+            else "VideoDroid colours restored — reopen the app to apply",
+        )
+        refreshAppearanceRow()
     }
+
+    // ---- About: hidden crash trigger (debug builds only) ------------------------------
 
     // ---- downloads -----------------------------------------------------------------
 
@@ -269,6 +266,7 @@ class SettingsActivity : AppCompatActivity() {
             .setMessage(JobDiag.redact(text.take(6000)))
             .setPositiveButton("Close", null)
             .show()
+                .also { d -> SecureScreen.secure(d) }
     }
 
     private fun copyLog() {

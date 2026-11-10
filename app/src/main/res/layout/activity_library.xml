@@ -70,6 +70,18 @@
                 android:textSize="13sp" />
 
                 <Button
+                    android:id="@+id/libraryViewToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:minHeight="40dp"
+                    android:text="List"
+                    android:textAllCaps="false"
+                    android:textColor="@color/vd_text_dim"
+                    android:textSize="13sp" />
+
+                <Button
                     android:id="@+id/librarySort"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -157,7 +169,7 @@
             android:clipToPadding="false"
             android:columnWidth="112dp"
             android:horizontalSpacing="8dp"
-            android:numColumns="auto_fit"
+            android:numColumns="2"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:paddingBottom="20dp"

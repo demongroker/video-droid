@@ -32,7 +32,8 @@ object LibraryThumbLoader {
             view.setImageBitmap(it)
             return
         }
-        view.setImageResource(R.drawable.ic_library)
+        // Purple shimmer placeholder while the frame is decoded — never a black box.
+        view.setImageResource(R.drawable.bg_shimmer)
         pool.execute {
             val bitmap = runCatching {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {

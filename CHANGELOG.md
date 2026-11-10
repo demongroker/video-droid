@@ -2,6 +2,42 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.4.0 (versionCode 93)
+
+### Phase 2 "Beautiful" — first slice
+Design foundation and the screens that benefit most. The downloader-side upgrades (audio-only,
+subtitle embedding) are NOT in this build; see the note at the end.
+
+- **One design system.** `values/dimens.xml` holds the 8dp spacing grid, 16dp card corners,
+  control heights and a single type scale (`Text.VideoDroid.*`). Palette re-tuned to AMOLED:
+  pure black `#000000`, surfaces `#121212` / `#1C1C1E`, accent `#8B5CF6`.
+- **Material You toggle** — Settings → Appearance. Off by default (VideoDroid's own black +
+  violet); when on, `DynamicColors` takes the wallpaper palette. Applying it needs an app
+  restart, which the toggle says.
+- **New adaptive icon**: purple download-arrow mark on a near-black tile, with a **monochrome
+  layer** for Android 13+ themed icons (`mipmap-anydpi-v33`).
+- **About screen** (new): icon, version, check for updates, changelog, GitHub link, licences,
+  and **Crash logs moved here** from Settings. The version line is also the seven-tap
+  test-crash trigger in debug builds.
+- **Library**: 2-column grid by default with a List/Grid toggle (remembered), purple **shimmer
+  placeholder** while a thumbnail decodes instead of a flat box, and middle-ellipsis titles so
+  the end of a filename stays readable.
+- **Play in Vela**: tapping a video offers Vela when it is installed, otherwise the system
+  player, otherwise the share sheet.
+- **Quick Settings tile** "Clipboard link": one tap queues the link on the clipboard (validated
+  with the same `ClipboardLink` rules as the in-app banner).
+- **FLAG_SECURE covers dialogs and sheets too** — previously the flag was on the activity only,
+  so a dialog could appear in a screen recording. A single `SecureScreen.secure()` now covers
+  dialogs, bottom sheets and popups.
+- **Haptics** on queueing, destructive confirms and the About tap sequence.
+- **Correct plurals**: one `Texts` helper ("1 video" / "2 videos", "1 selected"), unit tested.
+- Tests: 103 in total (`TextsTest` plus the existing suite).
+
+Still to come (not in 2.4.0): audio-only downloads with cover art, subtitle download/embedding
+with a language choice, drag-to-reorder in the queue, and the quality picker moving from chips
+into a bottom sheet. Those touch the download pipeline and need device verification before they
+ship.
+
 ## 2.3.6 (versionCode 92)
 
 ### Local crash log — the phone tells you what broke

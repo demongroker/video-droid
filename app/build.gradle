@@ -14,8 +14,14 @@ android {
         applicationId "com.xerxes.videodroid"
         minSdk 24
         targetSdk 36
-        versionCode 92
-        versionName "2.3.6"
+        versionCode 93
+        versionName "2.4.0"
+
+        // Screenshots for the README need a build that is not FLAG_SECURE. The flag defaults
+        // to ON everywhere; only the screenshot job passes -PnoSecureScreens=true, so a
+        // release build can never be weakened by accident.
+        def secure = !(project.findProperty("noSecureScreens") == "true")
+        buildConfigField "boolean", "SECURE_SCREENS", secure.toString()
         ndk {
             abiFilters "arm64-v8a"
         }

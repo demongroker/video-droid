@@ -212,6 +212,15 @@ class QueueActivity : AppCompatActivity() {
      * links — ten dead X rows should be one tap to clear, not ten swipes, and one tap to retry
      * once X login is sorted out.
      */
+    /** Cheap connectivity read, used only to word the row state. */
+    private fun isOnline(): Boolean = runCatching {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return@runCatching false
+        val net = cm.activeNetwork ?: return@runCatching false
+        val caps = cm.getNetworkCapabilities(net) ?: return@runCatching false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(false)
+
     private fun showQueueMenu(anchor: View) {
         val failed = jobs.count { it.failed }
         val menu = android.widget.PopupMenu(this, anchor)
@@ -266,7 +275,8 @@ class QueueActivity : AppCompatActivity() {
             val thumb: android.widget.ImageView = v.findViewById(R.id.queueRowThumb)
             val retry: com.google.android.material.button.MaterialButton =
                 v.findViewById(R.id.queueRowRetry)
-            val cancel: View = v.findViewById(R.id.queueRowCancel)
+            val cancel: com.google.android.material.button.MaterialButton =
+                v.findViewById(R.id.queueRowCancel)
             val pause: com.google.android.material.button.MaterialButton =
                 v.findViewById(R.id.queueRowPause)
         }
@@ -285,11 +295,13 @@ class QueueActivity : AppCompatActivity() {
 
             // Stage 3: the real name is the headline; state, quality, speed and ETA sit
             // underneath it where they can be scanned without reading the whole row.
+            val online = isOnline()
             val state = when {
-                job.failed -> "Failed — ${job.failReason.ifBlank { "tap retry" }}"
+                job.failed -> "Failed — ${ErrorText.human(job.failReason.ifBlank { "tap retry" })}"
                 job.paused -> if (job.progress > 0) "Paused · ${job.progress}%" else "Paused"
                 running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
-                else -> if (job.progress > 0) "Waiting · ${job.progress}%" else "Waiting"
+                !online -> "Waiting for connection"
+                else -> if (job.progress > 0) "Queued · ${job.progress}%" else "Queued"
             }
             holder.title.text = job.displayName.ifBlank { job.url }.trim()
             // While an item is actually transferring, show the live speed/ETA from yt-dlp
@@ -310,10 +322,14 @@ class QueueActivity : AppCompatActivity() {
             }
 
             // Explicit retry on failed rows instead of "tap the row and hope".
-            holder.retry.visibility = if (job.failed) View.VISIBLE else View.GONE
+            // Retry hides itself when the error is not retryable ("no video in this post").
+            holder.retry.visibility =
+                if (job.failed && ErrorText.retryable(job.failReason)) View.VISIBLE else View.GONE
             holder.retry.setOnClickListener { retry(job) }
 
-            holder.cancel.visibility = if (job.failed) View.GONE else View.VISIBLE
+            // Failed rows get Remove instead of Cancel: same call, clearer word.
+            holder.cancel.visibility = View.VISIBLE
+            holder.cancel.text = if (job.failed) "Remove" else "Cancel"
             holder.cancel.setOnClickListener { cancelOne(job) }
 
             // Pause/Resume per row. Failed rows have nothing to pause.

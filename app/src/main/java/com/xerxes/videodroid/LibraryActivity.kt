@@ -71,6 +71,8 @@ class LibraryActivity : AppCompatActivity() {
     private var sort = Sort.DATE
     private val selected = LinkedHashSet<Long>()
     private var adapter: GridAdapter? = null
+    private lateinit var viewToggleButton: TextView
+    private var listMode = false
 
     private val movePicker =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -125,6 +127,16 @@ class LibraryActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.findDuplicates).setOnClickListener { scanDuplicates() }
         sortButton.setOnClickListener { showSortMenu() }
+        viewToggleButton = findViewById(R.id.libraryViewToggle)
+        listMode = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_LIST_MODE, false)
+        applyViewMode()
+        viewToggleButton.setOnClickListener {
+            listMode = !listMode
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_LIST_MODE, listMode).apply()
+            Haptics.tick(this)
+            applyViewMode()
+        }
 
         findViewById<View>(R.id.librarySelShare).setOnClickListener { shareSelected() }
         findViewById<View>(R.id.librarySelMove).setOnClickListener { pickMoveTarget() }
@@ -193,6 +205,12 @@ class LibraryActivity : AppCompatActivity() {
         Sort.NAME -> list.sortedBy { it.name.lowercase() }
     }
 
+    /** Grid (2 columns) or a single-column list; remembered between launches. */
+    private fun applyViewMode() {
+        grid.numColumns = if (listMode) 1 else 2
+        viewToggleButton.text = if (listMode) "Grid" else "List"
+    }
+
     private fun renderSortButton() {
         sortButton.text = sort.label
     }
@@ -212,14 +230,9 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun open(item: Item) {
-        runCatching {
-            startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(item.uri, "video/*")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                },
-            )
-        }.onFailure { shareOne(item.uri) }
+        // Vela when it is installed, otherwise the system player, otherwise share.
+        if (PlayerChoice.play(this, item.uri)) return
+        shareOne(item.uri)
     }
 
     // ---- selection ----------------------------------------------------------------
@@ -239,7 +252,7 @@ class LibraryActivity : AppCompatActivity() {
     private fun syncSelectionUi() {
         val n = selected.size
         selectionBar.visibility = if (n == 0) View.GONE else View.VISIBLE
-        selectionCount.text = "$n selected"
+        selectionCount.text = Texts.selected(n)
     }
 
     private fun selectedItems(): List<Item> = items.filter { selected.contains(it.id) }
@@ -296,13 +309,14 @@ class LibraryActivity : AppCompatActivity() {
     private fun performMove(treeUri: Uri) {
         val targets = selectedItems()
         if (targets.isEmpty() || moving) return
+        Haptics.tick(this)
         moving = true
         val progress = MaterialAlertDialogBuilder(this)
             .setTitle("Moving…")
             .setMessage("${targets.size} file${if (targets.size == 1) "" else "s"}")
             .setCancelable(false)
             .create()
-        progress.show()
+        progress.show().also { d -> SecureScreen.secure(d) }
 
         lifecycleScope.launch {
             val results = withContext(Dispatchers.IO) {
@@ -368,11 +382,15 @@ class LibraryActivity : AppCompatActivity() {
         val targets = selectedItems()
         if (targets.isEmpty()) return
         MaterialAlertDialogBuilder(this)
-            .setTitle("Delete ${targets.size} video${if (targets.size == 1) "" else "s"}?")
+            .setTitle("Delete ${Texts.videos(targets.size)}?")
             .setMessage("This removes the file from your phone. It cannot be undone.")
             .setNegativeButton("Keep", null)
-            .setPositiveButton("Delete") { _, _ -> deleteItems(targets) }
+            .setPositiveButton("Delete") { _, _ ->
+                Haptics.thud(this)
+                deleteItems(targets)
+            }
             .show()
+                .also { d -> SecureScreen.secure(d) }
     }
 
     private fun deleteItems(targets: List<Item>) {
@@ -443,7 +461,7 @@ class LibraryActivity : AppCompatActivity() {
         val more = if (groups.size > 3) "\n…and ${groups.size - 3} more" else ""
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("${extras.size} duplicate${if (extras.size == 1) "" else "s"} found")
+            .setTitle("${Texts.duplicates(extras.size)} found")
             .setMessage(
                 "$preview$more\n\nMove the extra copies to Downloads/VideoDroid/duplicates? " +
                     "Nothing is deleted.",
@@ -451,6 +469,7 @@ class LibraryActivity : AppCompatActivity() {
             .setNegativeButton("Keep all", null)
             .setPositiveButton("Move extras") { _, _ -> quarantine(extras) }
             .show()
+                .also { d -> SecureScreen.secure(d) }
     }
 
     private fun quarantine(extras: List<DuplicateScan.Entry>) {
@@ -466,7 +485,7 @@ class LibraryActivity : AppCompatActivity() {
             .setMessage("${extras.size} file${if (extras.size == 1) "" else "s"}")
             .setCancelable(false)
             .create()
-        progress.show()
+        progress.show().also { d -> SecureScreen.secure(d) }
 
         lifecycleScope.launch {
             val movedTo = withContext(Dispatchers.IO) { moveExtras(extras) }
@@ -615,5 +634,6 @@ class LibraryActivity : AppCompatActivity() {
         const val DUPLICATES_RELATIVE_PATH = "Download/VideoDroid/duplicates"
         const val PREFS = "videodroid"
         const val KEY_SORT = "lib_sort"
+        const val KEY_LIST_MODE = "lib_list_mode"
     }
 }

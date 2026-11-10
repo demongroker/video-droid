@@ -60,7 +60,7 @@ class JobDiagHistoryTest {
         val block = JobDiag.snapshotBlock()
         assertTrue(block, block.contains("ffmpeg rc: 69"))
         assertTrue(block, block.contains("Invalid data"))
-        assertTrue("unknown duration must say so, not 0s", block.contains("duration: not reached"))
+        assertFalse("no duration line at all when nothing was probed", block.contains("duration:"))
     }
 
     @Test

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/aboutRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vd_bg"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/space_5"
+        android:paddingTop="@dimen/space_4"
+        android:paddingEnd="@dimen/space_3">
+
+        <ImageButton
+            android:id="@+id/aboutBack"
+            android:layout_width="@dimen/icon_button"
+            android:layout_height="@dimen/icon_button"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:padding="10dp"
+            android:src="@drawable/ic_queue"
+            app:tint="@color/vd_text_dim" />
+
+        <TextView
+            style="@style/Text.VideoDroid.Title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_2"
+            android:layout_weight="1"
+            android:text="About" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/space_5"
+            android:paddingTop="@dimen/space_4"
+            android:paddingEnd="@dimen/space_5"
+            android:paddingBottom="@dimen/space_6">
+
+            <ImageView
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:layout_gravity="center_horizontal"
+                android:contentDescription="VideoDroid icon"
+                android:src="@drawable/ic_launcher_foreground"
+                android:background="@drawable/bg_icon_tile" />
+
+            <TextView
+                style="@style/Text.VideoDroid.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_3"
+                android:gravity="center"
+                android:text="VideoDroid" />
+
+            <TextView
+                android:id="@+id/aboutVersion"
+                style="@style/Text.VideoDroid.Label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_1"
+                android:gravity="center"
+                android:text="" />
+
+            <TextView
+                style="@style/Text.VideoDroid.Label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_2"
+                android:gravity="center"
+                android:text="Phone-only downloader · yt-dlp + FFmpeg on device · no account" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/aboutCheckUpdate"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_5"
+                android:text="Check for updates"
+                android:textAllCaps="false"
+                app:cornerRadius="@dimen/corner_card" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/aboutChangelog"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Changelog"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/aboutCrashLogs"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Crash logs"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/aboutGitHub"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="GitHub repository"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/aboutLicenses"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:text="Licenses"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
+            <TextView
+                style="@style/Text.VideoDroid.Label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_5"
+                android:text="Everything stays on this phone: cookies, downloads and crash logs. Nothing is uploaded, and there is no analytics." />
+
+            <TextView
+                android:id="@+id/aboutTapHint"
+                style="@style/Text.VideoDroid.SectionLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:gravity="center"
+                android:padding="@dimen/space_3"
+                android:text="TAP THE VERSION ABOVE" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

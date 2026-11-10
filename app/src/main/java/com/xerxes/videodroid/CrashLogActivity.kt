@@ -125,10 +125,12 @@ class CrashLogActivity : AppCompatActivity() {
                 val n = CrashLog.clearAll(this)
                 closeViewer()
                 reload()
-                Toast.makeText(this, "Deleted $n log${if (n == 1) "" else "s"}", Toast.LENGTH_SHORT)
+                Toast.makeText(this, "Deleted ${Texts.logs(n)}", Toast.LENGTH_SHORT)
                     .show()
+                        .also { d -> SecureScreen.secure(d) }
             }
             .show()
+                .also { d -> SecureScreen.secure(d) }
     }
 
     private inner class EntryAdapter(private val rows: List<File>) : BaseAdapter() {

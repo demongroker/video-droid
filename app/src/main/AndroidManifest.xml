@@ -45,6 +45,10 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:label="About" />
+        <activity
             android:name=".CrashLogActivity"
             android:exported="false"
             android:label="Crash logs" />
@@ -103,5 +107,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <service
+            android:name=".DownloadTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_foreground"
+            android:label="Clipboard link"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>
