@@ -42,4 +42,17 @@ object CandidatePicker {
                 .thenByDescending { it.durationSeconds },
         ).firstOrNull()
     }
+
+    /**
+     * 2.5.1 field fix: when the only things on offer are small clips from a foreign CDN, the page
+     * almost certainly plays its real video through an embedded player that the static sniffer
+     * cannot see. Auto-downloading one of those clips is worse than doing nothing, so the caller
+     * should offer the Scan page sheet instead.
+     *
+     * True when: every candidate is a clip, and none of them is served from the page's own host.
+     */
+    fun onlyTinyForeign(candidates: List<Candidate>): Boolean =
+        candidates.isNotEmpty() &&
+            candidates.all { isClip(it) } &&
+            candidates.none { it.sameHostAsPage }
 }

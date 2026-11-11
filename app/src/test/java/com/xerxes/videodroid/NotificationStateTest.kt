@@ -35,7 +35,7 @@ class NotificationStateTest {
     @Test
     fun onlyClaimsToWaitForTheNetworkWhenOffline() {
         assertEquals(
-            "Waiting for connection… (resumes automatically)",
+            "Connection lost — reconnecting…",
             NotificationState.text(inFlight = 1, waiting = 0, online = false),
         )
         assertTrue(
@@ -54,5 +54,20 @@ class NotificationStateTest {
         assertTrue(NotificationState.needsReconcile(runnableJobs = 0, workActive = true))
         assertFalse(NotificationState.needsReconcile(runnableJobs = 2, workActive = true))
         assertFalse(NotificationState.needsReconcile(runnableJobs = 0, workActive = false))
+    }
+
+    // ---- 2.5.1: never claim "waiting for connection" while online ----
+
+    @Test
+    fun stalledWhileOnlineSaysSlowConnection() {
+        val t = NotificationState.text(inFlight = 1, waiting = 0, online = true, stalled = true)
+        assertEquals("Slow connection — retrying", t)
+        assertEquals(false, t!!.contains("Waiting", ignoreCase = true))
+    }
+
+    @Test
+    fun realDropoutSaysReconnecting() {
+        assertEquals("Connection lost — reconnecting…",
+            NotificationState.text(inFlight = 1, waiting = 0, online = false))
     }
 }

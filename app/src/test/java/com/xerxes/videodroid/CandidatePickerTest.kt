@@ -1,6 +1,8 @@
 package com.xerxes.videodroid
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -47,5 +49,33 @@ class CandidatePickerTest {
     @Test
     fun nothingToPick() {
         assertNull(CandidatePicker.choose(emptyList()))
+    }
+
+    // ---- 2.5.1: tiny foreign clips must not be auto-downloaded ----
+
+    @Test
+    fun tinyForeignClipsAskForTheScanSheet() {
+        val clips = listOf(
+            CandidatePicker.Candidate("https://video.twimg.com/a.mp4", sizeBytes = 2L * 1024 * 1024, durationSeconds = 12.0, sameHostAsPage = false),
+            CandidatePicker.Candidate("https://video.twimg.com/b.mp4", sizeBytes = 1L * 1024 * 1024, durationSeconds = 9.0, sameHostAsPage = false),
+        )
+        assertTrue(CandidatePicker.onlyTinyForeign(clips))
+    }
+
+    @Test
+    fun aRealVideoOnThePagesOwnHostIsNotTinyForeign() {
+        val mixed = listOf(
+            CandidatePicker.Candidate("https://site.example/main.mp4", sizeBytes = 900L * 1024 * 1024, sameHostAsPage = true),
+            CandidatePicker.Candidate("https://video.twimg.com/ad.mp4", sizeBytes = 5L * 1024 * 1024, sameHostAsPage = false),
+        )
+        assertFalse(CandidatePicker.onlyTinyForeign(mixed))
+    }
+
+    @Test
+    fun clipsOnThePagesOwnHostStillCount() {
+        val ownHostClip = listOf(
+            CandidatePicker.Candidate("https://site.example/preview.mp4", sizeBytes = 2L * 1024 * 1024, sameHostAsPage = true),
+        )
+        assertFalse(CandidatePicker.onlyTinyForeign(ownHostClip))
     }
 }

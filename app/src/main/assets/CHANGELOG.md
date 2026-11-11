@@ -2,6 +2,24 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.1 (versionCode 98)
+
+### Field-log fixes
+
+- **Empty downloads fail properly.** A job that wrote 0 bytes, or a 20–40 KB HTML error page
+  instead of a video, now fails with "Download was empty — try Scan page" instead of reporting
+  Saved. Real-but-short transfers keep the specific "incomplete" wording.
+- **No more ads instead of the video.** When every candidate on a page is a small clip served
+  from a foreign CDN, the fallback refuses to auto-download and sends you to the Scan page
+  picker, because the real video is behind an embedded player the static sniffer cannot see.
+- **Honest connection wording.** A slow or stalled read while the phone is online now reads
+  "Slow connection — retrying"; "Connection lost — reconnecting…" is reserved for a real
+  dropout. The old text claimed the network was gone while bytes were still arriving.
+- **Real host in job headers.** Shared text and bare domains resolve to a host instead of
+  "(unknown)"; genuinely linkless jobs say "(no link)".
+- **Log privacy.** New Settings → "Include page titles in copied log" (default off): titles are
+  replaced with [title] unless you opt in.
+
 ## 2.5.0 (versionCode 97)
 
 ### Scan page for videos

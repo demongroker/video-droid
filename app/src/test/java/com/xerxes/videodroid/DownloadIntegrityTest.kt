@@ -36,8 +36,8 @@ class DownloadIntegrityTest {
 
     @Test
     fun `an empty or tiny file is refused`() {
-        assertEquals("only 0 bytes", check(size = 0))
-        assertEquals("only 900 bytes", check(size = 900))
+        assertEquals("empty: 0 bytes", check(size = 0))          // 2.5.1: empty != short
+        assertEquals("empty: 900 bytes", check(size = 900))      // under the 64 KB floor
     }
 
     @Test
@@ -64,8 +64,13 @@ class DownloadIntegrityTest {
     @Test
     fun `the queue row message is honest`() {
         assertEquals(
-            "Download incomplete — nothing was saved (only 0 bytes)",
-            DownloadIntegrity.failureMessage("only 0 bytes"),
+            "Download was empty — try Scan page",
+            DownloadIntegrity.failureMessage("empty: 0 bytes"),
+        )
+        // A short-but-not-empty download keeps the old, more specific wording.
+        assertEquals(
+            "Download incomplete — nothing was saved (short: 3 of ~10 bytes)",
+            DownloadIntegrity.failureMessage("short: 3 of ~10 bytes"),
         )
         assertTrue(
             "the retry classifier must treat this as network-shaped",

@@ -62,6 +62,8 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.changelogButton).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.copyLogButton).setOnClickListener { copyLog() }
+        findViewById<Button>(R.id.includeTitlesButton).setOnClickListener { toggleIncludeTitles() }
+        findViewById<Button>(R.id.includeTitlesButton).text = LogPrivacy.label(this)
 
         findViewById<Button>(R.id.audioOnlyButton).setOnClickListener { toggleAudioOnly() }
         findViewById<Button>(R.id.subtitlesButton).setOnClickListener { cycleSubtitles() }
@@ -99,6 +101,19 @@ class SettingsActivity : AppCompatActivity() {
             "Subtitle language: ${SubtitlePrefs.language(this)}"
         findViewById<Button>(R.id.subtitleLangButton)?.isEnabled =
             SubtitlePrefs.mode(this) != "off"
+    }
+
+    // ---- log privacy (2.5.1) ----------------------------------------------------------
+
+    private fun toggleIncludeTitles() {
+        val on = !LogPrivacy.includeTitles(this)
+        LogPrivacy.setIncludeTitles(this, on)
+        Haptics.tick(this)
+        findViewById<Button>(R.id.includeTitlesButton).text = LogPrivacy.label(this)
+        toast(
+            if (on) "Page titles will appear in copied logs"
+            else "Page titles hidden in copied logs",
+        )
     }
 
     private fun toggleAudioOnly() {

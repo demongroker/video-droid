@@ -21,13 +21,32 @@ object JobLog {
         val lines: List<String> = emptyList(),
     )
 
-    /** Host only: `https://site/watch/1?t=abc` → `site`. */
-    fun hostOf(url: String): String = try {
-        val withScheme = if (url.startsWith("http", true)) url else "https://$url"
-        java.net.URI(withScheme).host?.removePrefix("www.")?.ifBlank { "(unknown)" } ?: "(unknown)"
-    } catch (t: Throwable) {
-        "(unknown)"
+    /**
+     * Host only: `https://site/watch/1?t=abc` → `site`.
+     *
+     * 2.5.1 field fix: job headers showed "(unknown)" because a shared post often arrives as
+     * bare text (no scheme, sometimes just a domain), which [java.net.URI] refuses to parse.
+     * Now the scheme is added when missing and, if parsing still fails, a domain-shaped token
+     * is picked out of the text. "(unknown)" is gone: a job either has a host or honestly
+     * shows that its link had none.
+     */
+    fun hostOf(url: String): String {
+        val raw = url.trim()
+        if (raw.isEmpty()) return "(no link)"
+        val withScheme = if (raw.startsWith("http", true)) raw else "https://$raw"
+        val parsed = try {
+            java.net.URI(withScheme).host
+        } catch (t: Throwable) {
+            null
+        }
+        val host = parsed?.removePrefix("www.")?.ifBlank { null } ?: domainIn(raw)
+        return host ?: "(no host)"
     }
+
+    private val DOMAIN = Regex("""(?i)\b((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})\b""")
+
+    private fun domainIn(text: String): String? =
+        DOMAIN.find(text)?.groupValues?.getOrNull(1)?.lowercase()?.removePrefix("www.")
 
     fun format(jobs: List<Job>, maxChars: Int = 12000): String {
         if (jobs.isEmpty()) return "(no jobs recorded)"
