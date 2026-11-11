@@ -346,7 +346,10 @@ object FormatWorker {
                             val page = StaticPageFetcher.fetch(context, url)
                             JobDiag.noteStatus(
                                 "static: HTTP ${page.status} len=${page.length} " +
-                                    "title=${page.title.take(60)} " +
+                                    "title=" + LogPrivacy.title(
+                                        page.title,
+                                        LogPrivacy.includeTitles(context),
+                                    ) + " " +
                                     "blocked=${page.blocked ?: "-"} " +
                                     "final=${page.finalUrl.take(90)} " +
                                     "err=${page.error ?: "-"}",
