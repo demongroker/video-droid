@@ -16,6 +16,14 @@ object DownloadIntegrity {
     /** Smaller than this cannot be a video no matter what the site claims. */
     const val MIN_BYTES = 1024L
 
+    /**
+     * 2.5.1 field fix: a "Saved" job that wrote 0 bytes (and the 20-40 KB HTML error pages that
+     * servers hand back instead of a video) is an EMPTY download, not a short one. It gets its
+     * own reason so the queue can say "Download was empty — try Scan page" instead of
+     * "incomplete".
+     */
+    const val EMPTY_BYTES = 64L * 1024
+
     /** A download may legitimately be slightly under an estimate, never far under. */
     private const val SHORT_FRACTION_NUM = 9
     private const val SHORT_FRACTION_DEN = 10
@@ -36,6 +44,7 @@ object DownloadIntegrity {
     ): String? {
         val lower = name.lowercase()
         if (lower.endsWith(".part") || lower.contains(".part.")) return "partial file"
+        if (sizeBytes < EMPTY_BYTES) return "empty: $sizeBytes bytes"
         if (sizeBytes < MIN_BYTES) return "only $sizeBytes bytes"
         if (expectedBytes > 0 && sizeBytes * SHORT_FRACTION_DEN < expectedBytes * SHORT_FRACTION_NUM) {
             return "short: $sizeBytes of ~$expectedBytes bytes"
@@ -49,5 +58,6 @@ object DownloadIntegrity {
 
     /** The message shown on the queue row. */
     fun failureMessage(reason: String): String =
-        "Download incomplete — nothing was saved ($reason)"
+        if (reason.startsWith("empty")) "Download was empty — try Scan page"
+        else "Download incomplete — nothing was saved ($reason)"
 }
