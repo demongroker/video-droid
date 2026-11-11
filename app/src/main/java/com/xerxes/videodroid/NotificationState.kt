@@ -22,10 +22,14 @@ object NotificationState {
      * @param waiting  jobs that could still run (not failed, not paused, not cancelled)
      * @param online   what ConnectivityManager says right now
      */
-    fun text(inFlight: Int, waiting: Int, online: Boolean): String? {
+    fun text(inFlight: Int, waiting: Int, online: Boolean, stalled: Boolean = false): String? {
         val total = inFlight + waiting
         if (total <= 0) return null
-        if (!online) return "Waiting for connection… (resumes automatically)"
+        if (!online) return "Connection lost — reconnecting…"
+        // 2.5.1 field fix: a slow or stalled read while ConnectivityManager says ONLINE is never
+        // "waiting for connection". Field log showed "Waiting for connection" alternating with
+        // progress on a live connection; that wording is reserved for a real dropout now.
+        if (stalled && inFlight > 0) return "Slow connection — retrying"
         if (inFlight <= 0) return "Queued · " + if (total == 1) "1 download" else "$total downloads"
         return if (total == 1) "Downloading 1" else "Downloading $total"
     }

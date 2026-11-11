@@ -380,16 +380,25 @@ object FormatWorker {
                             // host, then the largest) and only then fall back to pickBest().
                             val pageHost = runCatching { java.net.URI(page.finalUrl).host.orEmpty() }
                                 .getOrDefault("")
-                            val ranked = CandidatePicker.choose(
-                                candidates.distinct().take(8).map { c ->
-                                    CandidatePicker.Candidate(
-                                        url = c,
-                                        sameHostAsPage = pageHost.isNotEmpty() && runCatching {
-                                            java.net.URI(c).host.orEmpty().endsWith(pageHost)
-                                        }.getOrDefault(false),
-                                    )
-                                },
-                            )?.url
+                            val pickable = candidates.distinct().take(8).map { c ->
+                                CandidatePicker.Candidate(
+                                    url = c,
+                                    sameHostAsPage = pageHost.isNotEmpty() && runCatching {
+                                        java.net.URI(c).host.orEmpty().endsWith(pageHost)
+                                    }.getOrDefault(false),
+                                )
+                            }
+                            // 2.5.1: tiny clips from a foreign CDN mean the real video lives behind
+                            // an embedded player the static sniffer cannot see. Do not auto-download
+                            // an ad — send the owner to the Scan page picker instead.
+                            if (CandidatePicker.onlyTinyForeign(pickable)) {
+                                val msg = "Only small clips on this page — try Scan page"
+                                emit(msg)
+                                JobDiag.noteStatus("fallback: only tiny foreign clips, scan sheet suggested")
+                                JobDiag.finishJob()
+                                return FormatResult(false, msg)
+                            }
+                            val ranked = CandidatePicker.choose(pickable)?.url
                             var found = (ranked ?: MediaUrlParser.pickBest(candidates))?.let { mediaUrl ->
                                 SniffedMedia(mediaUrl, page.title, page.finalUrl, PageSniffer.DESKTOP_UA)
                             }

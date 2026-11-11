@@ -11,7 +11,7 @@ class JobLogTest {
     fun hostOnlyFromAnyUrl() {
         assertEqualsHost("x.com", "https://x.com/user/status/123?a=1&s=19")
         assertEqualsHost("porneec.com", "https://www.porneec.com/watch/1")
-        assertEqualsHost("(unknown)", "not a url at all")
+        assertEqualsHost("(no host)", "not a url at all")
     }
 
     private fun assertEqualsHost(expected: String, url: String) {
