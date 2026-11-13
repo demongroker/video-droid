@@ -272,11 +272,20 @@ class MainActivity : AppCompatActivity(), DownloadService.Listener, ShareSheetFr
             }
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val pkg = packageManager.getPackageInfo(packageName, 0)
-                UpdateChecker.check(this@MainActivity, pkg.versionName ?: "0.0", userInitiated = false)
-            } catch (_: Throwable) { }
+        // The update check must never race the first frame. Posting it to the
+        // decor view means the home UI is drawn first, so a prompt (when one is
+        // warranted) appears over a real screen instead of an empty window, and
+        // no dialog can sit on top of a black screen while the check is in
+        // flight. UpdateChecker additionally refuses to prompt while a download
+        // is running, snoozed, offline or Wi-Fi-blocked.
+        window.decorView.post {
+            if (isFinishing || isDestroyed) return@post
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val pkg = packageManager.getPackageInfo(packageName, 0)
+                    UpdateChecker.check(this@MainActivity, pkg.versionName ?: "0.0", userInitiated = false)
+                } catch (_: Throwable) { }
+            }
         }
     }
 

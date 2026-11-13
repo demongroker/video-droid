@@ -2,6 +2,45 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.7 (versionCode 104)
+
+### Fix: the update prompt no longer fights the app
+
+The updater asked again on every tap and every launch, kept asking while its own download was
+already running, and crashed the app when "Download" was tapped a second time.
+
+- **A second "Download" tap can no longer start a second download.** `UpdateService.start()`
+  is now single-flight (an `AtomicBoolean` plus the persisted job version), and
+  `UpdateChecker.startDownload()` checks the running job first and reports
+  *"Update downloading (12%)"* instead of starting another thread. Two threads appending to the
+  same `VideoDroid-update.apk.part` through `RandomAccessFile`, with a second
+  `startForegroundService` on top, is what took the process down.
+- **Nothing in the download thread can kill the app any more.** The whole worker body is wrapped
+  in `try/catch/finally`; previously an unexpected `Throwable` (notification after teardown, a
+  disk error) reached the default handler and the process died.
+- **The update check never races the first frame.** It is posted to `window.decorView`, so the
+  home UI is drawn before any prompt can appear — no modal over an empty window.
+- **The prompt is decided in one place** (`UpdatePrompt`): hidden while a download for that
+  version is running, while snoozed, while the last attempt failed (that becomes a *Retry* dialog
+  with the reason), when the APK is already downloaded and verified (that becomes *"ready — tap
+  Install"*), when offline, and when Wi-Fi only blocks a mobile-data transfer.
+- **"Later" now snoozes the prompt for 24 hours** instead of asking again on the next resume.
+- **Network handling is explicit**: offline shows *"No internet — update will retry when you're
+  back online"*; **"Wi-Fi only" defaults to ON** (at sea, mobile data is expensive) and can be
+  toggled from the same dialog, with *"Wi-Fi only is on — update will download when you're on
+  Wi-Fi"* when blocked.
+- **Integrity before install, fail-closed**: the APK is checked against the signer *and* against
+  the published `<asset>.apk.sha256` (fetched beside the release asset). A mismatch, or a release
+  with no checksum, deletes the file and refuses the install.
+- Partial downloads still resume (`Range` + `If-Range` ETag, `.part` kept between attempts).
+
+### Tests
+
+`UpdatePromptTest` covers: dialog suppressed while a download is active, a stale job for an older
+version not suppressing a newer prompt, verified → install prompt, failed → retry with the reason,
+offline → message not dialog, Wi-Fi-only blocking mobile data, `Later` snoozing 24 h and expiring,
+and an installed version never prompting.
+
 ## 2.5.6 (versionCode 103)
 
 ### Fix: the 2.5.5 release build failed lint

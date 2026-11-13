@@ -65,6 +65,7 @@ object UpdateChecker {
         outcome: FetchOutcome,
     ) {
         val info = outcome.info
+        val app = activity.applicationContext
         if (info == null) {
             if (userInitiated) {
                 val raw = outcome.error.orEmpty()
@@ -81,11 +82,37 @@ object UpdateChecker {
             if (userInitiated) report(activity, "Update check: empty tag_name")
             return
         }
-        if (!isNewer(latestVersion, installedVersion)) {
-            if (userInitiated) report(activity, "Up to date ($installedVersion)")
-            return
+
+        // One decision point (UpdatePrompt) for every case: a download already in
+        // flight, a snooze, no network, Wi-Fi only, a failed attempt, or a real
+        // prompt. The old code prompted unconditionally and restarted the
+        // download on every tap.
+        val decision = UpdatePrompt.decide(
+            UpdatePromptInput(
+                latestVersion = latestVersion,
+                installedVersion = installedVersion,
+                nowMillis = System.currentTimeMillis(),
+                snoozeUntilMillis = UpdateState.snoozeUntil(app),
+                jobVersion = UpdateState.jobVersion(app),
+                jobState = UpdateState.jobState(app),
+                jobPercent = UpdateState.jobPercent(app),
+                jobError = UpdateState.jobError(app),
+                online = UpdateState.isOnline(app),
+                unmetered = UpdateState.isUnmetered(app),
+                wifiOnly = UpdateState.wifiOnly(app),
+                userInitiated = userInitiated,
+            )
+        )
+
+        when (decision.action) {
+            UpdateAction.NONE -> if (decision.message.isNotBlank()) report(activity, decision.message)
+            UpdateAction.SHOW_DOWNLOADING,
+            UpdateAction.SHOW_READY,
+            UpdateAction.SHOW_OFFLINE,
+            UpdateAction.WAIT_FOR_WIFI -> report(activity, decision.message)
+            UpdateAction.SHOW_FAILED,
+            UpdateAction.PROMPT -> promptForDownload(activity, latestVersion, info.apkUrl, decision)
         }
-        showDialog(activity, latestVersion, info.apkUrl)
     }
 
     private fun report(activity: Activity, msg: String) {
@@ -148,30 +175,82 @@ object UpdateChecker {
         return null
     }
 
-    private fun showDialog(activity: Activity, version: String, apkUrl: String) {
+    /**
+     * Shows the update prompt. Called only when [UpdatePrompt] says a prompt is
+     * appropriate — never while a download is running, snoozed, offline or
+     * waiting for Wi-Fi (those are reported as status text instead, so the main
+     * UI is never covered by a dialog the user cannot act on).
+     */
+    private fun promptForDownload(
+        activity: Activity,
+        version: String,
+        apkUrl: String,
+        decision: UpdateDecision,
+    ) {
         val ref = WeakReference(activity)
         activity.runOnUiThread {
             val act = ref.get() ?: return@runOnUiThread
             if (act.isFinishing || act.isDestroyed) return@runOnUiThread
+            val retry = decision.action == UpdateAction.SHOW_FAILED
             androidx.appcompat.app.AlertDialog.Builder(act)
-                .setTitle("Update available")
-                .setMessage(
-                    "Version $version is available. You have ${BuildConfig.VERSION_NAME}.\n" +
-                        "Download and install the APK in-app?"
-                )
-                .setPositiveButton("Download") { _, _ ->
+                .setTitle(if (retry) "Update failed" else "Update available")
+                .setMessage("${decision.message}\n\nDownload and install the APK in-app?")
+                .setPositiveButton(if (retry) "Retry" else "Download") { _, _ ->
                     startDownload(act, version, apkUrl)
                 }
-                .setNegativeButton("Later", null)
+                .setNeutralButton("Wi-Fi only") { _, _ ->
+                    // Toggle without leaving the dialog flow: default is ON, and at
+                    // sea mobile data is expensive.
+                    val now = !UpdateState.wifiOnly(act)
+                    UpdateState.setWifiOnly(act, now)
+                    Toast.makeText(
+                        act,
+                        if (now) "Updates will download on Wi-Fi only" else "Updates may use mobile data",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+                .setNegativeButton("Later") { _, _ ->
+                    UpdateState.snooze(act)
+                    Toast.makeText(act, "Update reminder snoozed for 24h", Toast.LENGTH_SHORT).show()
+                }
                 .show()
         }
     }
 
     private fun startDownload(activity: Activity, version: String, apkUrl: String) {
-        UpdateService.start(activity.applicationContext, version, apkUrl)
+        val app = activity.applicationContext
+        // Belt and braces: the service refuses a second start, but asking here
+        // means the user gets "downloading (x%)" instead of a silent no-op.
+        if (UpdateState.isDownloadActive(app)) {
+            Toast.makeText(
+                activity,
+                UpdatePrompt.downloadingMessage(UpdateState.jobPercent(app)),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        if (!UpdateState.isOnline(app)) {
+            Toast.makeText(activity, "No internet — update will retry when you're back online", Toast.LENGTH_LONG)
+                .show()
+            return
+        }
+        if (UpdateState.wifiOnly(app) && !UpdateState.isUnmetered(app)) {
+            Toast.makeText(
+                activity,
+                "Wi-Fi only is on — update $version will download when you're on Wi-Fi",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        UpdateState.clearSnooze(app)
+        val started = UpdateService.start(app, version, apkUrl)
         Toast.makeText(
             activity,
-            "Downloading $version in the background — progress is in the status bar",
+            if (started) {
+                "Downloading $version in the background — progress is in the status bar"
+            } else {
+                UpdatePrompt.downloadingMessage(UpdateState.jobPercent(app))
+            },
             Toast.LENGTH_SHORT,
         ).show()
     }
