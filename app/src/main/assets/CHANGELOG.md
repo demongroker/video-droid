@@ -2,6 +2,19 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.2 (versionCode 99)
+
+### Field-log fixes after 2.5.1
+
+- **The tiny-clip guard actually fires now.** 2.5.1 only blocked pages whose clips had a *known*
+  small size; links that were never measured (no HEAD, no duration) slipped through, so the
+  fallback still downloaded a `video.twimg.com` ad off a page with an embedded player. An
+  unmeasured foreign-CDN link now counts as clip-shaped: you get "Only small clips on this page —
+  try Scan page" instead.
+- **The last "Waiting for connection…" string is gone.** The connectivity callback still published
+  the old wording on a Wi-Fi handover; it now says "Connection lost — reconnecting…" and only when
+  ConnectivityManager agrees the phone is offline.
+
 ## 2.5.1 (versionCode 98)
 
 ### Field-log fixes

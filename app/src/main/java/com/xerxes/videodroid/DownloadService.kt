@@ -464,7 +464,10 @@ class DownloadService : Service() {
                 // Ask ConnectivityManager rather than trusting the callback: a Wi-Fi handover
                 // fires onLost while the phone is still perfectly online.
                 if (isRunning && !isOnlineNow()) {
-                    publishGlobal("Waiting for connection… (resumes automatically)")
+                    // 2.5.1 fix: the old wording ("Waiting for connection…") also fired on a
+                    // Wi-Fi handover and during a stalled-but-online transfer, which is what the
+                    // field log showed alternating with real progress.
+                    publishGlobal("Connection lost — reconnecting…")
                 }
                 startNetProbe()
             }

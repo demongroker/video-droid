@@ -53,6 +53,17 @@ object CandidatePicker {
      */
     fun onlyTinyForeign(candidates: List<Candidate>): Boolean =
         candidates.isNotEmpty() &&
-            candidates.all { isClip(it) } &&
-            candidates.none { it.sameHostAsPage }
+            candidates.none { it.sameHostAsPage } &&
+            candidates.all { isClip(it) || unknownShape(it) }
+
+    /**
+     * 2.5.1 shipped this guard too narrowly: a candidate whose size *and* duration were never
+     * measured (no HEAD, no probe) is not "a clip" by [isClip], so a whole page of unmeasured
+     * foreign-CDN links slipped past the guard and the fallback downloaded a twimg ad anyway
+     * (field log: `fallback: path=static host=video.twimg.com` on a page with an embedded player).
+     * An unmeasured candidate counts as clip-shaped here — the caller must have evidence of a
+     * real video before downloading, not the absence of evidence against one.
+     */
+    private fun unknownShape(c: Candidate): Boolean =
+        c.sizeBytes <= 0 && c.durationSeconds <= 0
 }

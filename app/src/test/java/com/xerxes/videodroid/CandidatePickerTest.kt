@@ -78,4 +78,23 @@ class CandidatePickerTest {
         )
         assertFalse(CandidatePicker.onlyTinyForeign(ownHostClip))
     }
+
+    // ---- 2.5.1 regression from the field log: unmeasured foreign CDN links ----
+
+    @Test
+    fun unmeasuredForeignLinksCountAsTinyForeign() {
+        // The real page: one <video> on a foreign CDN, size and duration never probed.
+        val unmeasured = listOf(
+            CandidatePicker.Candidate("https://video.twimg.com/ext_tw_video/1.mp4"),
+        )
+        assertTrue(CandidatePicker.onlyTinyForeign(unmeasured))
+    }
+
+    @Test
+    fun aMeasuredLargeForeignVideoIsNotBlocked() {
+        val big = listOf(
+            CandidatePicker.Candidate("https://cdn.example/film.mp4", sizeBytes = 700L * 1024 * 1024, durationSeconds = 1800.0),
+        )
+        assertFalse(CandidatePicker.onlyTinyForeign(big))
+    }
 }
