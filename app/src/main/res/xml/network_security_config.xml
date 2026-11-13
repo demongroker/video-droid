@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 2.5.6: the private tailnet host whitelisted here was removed in 2.5.5 along with the updater
+     fallback that needed it (updates are GitHub/HTTPS only). That left an EMPTY <domain-config>,
+     and lint vital refuses it: "No <domain> elements in <domain-config>" — which is exactly what
+     failed the 2.5.5 release build.
+
+     No cleartext exceptions at all now: every endpoint the app talks to is https. If a plain-http
+     host is ever needed again, name it explicitly here instead of re-opening cleartext globally. -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

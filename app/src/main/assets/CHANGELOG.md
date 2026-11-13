@@ -2,6 +2,16 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.6 (versionCode 103)
+
+### Fix: the 2.5.5 release build failed lint
+
+- 2.5.5 removed the private host from `network_security_config.xml` but left an **empty
+  `<domain-config>`**, which `lintVitalRelease` rejects ("No <domain> elements in <domain-config>")
+  — so the release build failed while unit tests passed. The file now declares
+  `cleartextTrafficPermitted="false"` in a `<base-config>`: no cleartext exceptions at all, which
+  matches the app's https-only endpoints.
+
 ## 2.5.5 (versionCode 102)
 
 ### Static audit fixes (crash, data loss, credential exposure)
