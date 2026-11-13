@@ -394,6 +394,9 @@ object DownloadQueue {
             out
         } catch (_: Throwable) {
             backupCorrupt(f)
+            // 2.5.5: leave the bad file in place and every waiting()/summary() read made
+            // another .bad.<ts> copy, flooding filesDir. Move it out of the way once.
+            runCatching { f.renameTo(File(f.parentFile, "${f.name}.quarantined")) }
             lastCorruptNotice = CORRUPT_MSG
             JobDiag.noteStatus(CORRUPT_MSG)
             JobDiag.noteException(CORRUPT_MSG)

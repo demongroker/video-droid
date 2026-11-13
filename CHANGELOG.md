@@ -2,6 +2,28 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.5 (versionCode 102)
+
+### Static audit fixes (crash, data loss, credential exposure)
+
+- **Android's 6-hour foreground-service cap no longer crashes the app.** A long queue on slow Wi-Fi
+  hits the Android 15+ `dataSync` limit; `onTimeout()` now pauses the queue and says "Paused:
+  Android time limit — tap Resume" instead of dying with ForegroundServiceDidNotStopInTime.
+- **Backup is off.** `allowBackup="false"` plus a `data_extraction_rules` file that excludes
+  everything: X session cookies, the queue, the WebView cookie DB and diagnostic logs can no longer
+  leave the phone through Google Drive backup or device-to-device transfer.
+- **"Clear login" really clears it.** The quarantined `cookies.txt.stale` copy — a usable
+  `auth_token` — is deleted too.
+- **Cancel stays cancelled.** A job that started right after Cancel/Pause-all used to reset the
+  shared cancel flag and silently un-cancel the jobs still running; workers no longer touch it.
+- **Unexpected worker errors keep your link.** A catch-all failure now marks the job failed with
+  the reason instead of deleting the row.
+- **A corrupt queue file is quarantined once**, not re-copied on every progress tick (which
+  flooded the app's private storage).
+- **Private addresses scrubbed from shipped config.** The cleartext whitelist entry for a private
+  tailnet address is gone from `network_security_config.xml` and from the changelog.
+- **Delayed work no longer outlives the service** — pending runnables are cleared in `onDestroy`.
+
 ## 2.5.4 (versionCode 101)
 
 ### Saved files get the name the page gave them
@@ -930,7 +952,7 @@ Phase 2 — architecture, queue durability and toolchain.
 Phase 1 — hardening, CI and size.
 
 - **Gradle wrapper + CI**: the repo now builds from the checked-in `gradlew` (8.9). New `.github/workflows/release.yml` runs on every PR/branch (debug + unsigned release, as a compile and size check) and produces a **signed** release on `v*` tags — one asset `VideoDroid-<version>.apk` plus `.sha256`.
-- **Updater hardened**: removed the hard-coded private plain-HTTP fallback (`http://100.105.81.82:8899/videodroid/version`). Update checks now use GitHub releases only and the APK URL must be `https`. The signing-certificate check is unchanged.
+- **Updater hardened**: removed the hard-coded private plain-HTTP fallback (`a private plain-HTTP fallback`). Update checks now use GitHub releases only and the APK URL must be `https`. The signing-certificate check is unchanged.
 - **Clear login narrowed**: clearing the X login now expires only x.com / twitter.com cookies instead of wiping the whole WebView cookie jar.
 - **APK ~11.7% smaller**: `minifyEnabled` + `shrinkResources` enabled with keep rules for Chaquopy and ffmpeg-kit; `ffmpeg-kit-full` → `ffmpeg-kit-video` (only copy / aac / mpeg4 / h264_mediacodec are used). Release APK 58.1 MiB → 51.3 MiB.
 - **Docs**: README updated to 1.6.28 behaviour (`best` removed, mpeg4 fallback documented); stale "instead of best (HEVC)" error text fixed; CHANGELOG 1.6.21 de-duplicated and reordered; pixel format corrected to `yuv420p` (not nv12).

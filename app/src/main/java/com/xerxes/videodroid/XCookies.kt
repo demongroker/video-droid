@@ -86,6 +86,9 @@ object XCookies {
      */
     fun clear(context: Context) {
         file(context).delete()
+        // 2.5.5: quarantine() keeps a .stale copy "for inspection", which meant
+        // "Clear login" left a usable auth_token on disk.
+        File(file(context).parentFile, "${file(context).name}.stale").delete()
         val cm = CookieManager.getInstance()
         val urls = listOf(
             "https://x.com/",

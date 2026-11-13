@@ -82,10 +82,39 @@ class DownloadService : Service() {
         wifiLock = null
     }
 
+
+    /**
+     * 2.5.5 (audit V-P0-1): a `dataSync` foreground service is capped at 6 hours per 24 on
+     * Android 15+. When the cap is reached the system calls onTimeout(), and an app that has not
+     * stopped within seconds is killed with ForegroundServiceDidNotStopInTimeException. A long
+     * queue on slow ship Wi-Fi will reach this, so pause cleanly and tell the owner why.
+     */
+    override fun onTimeout(startId: Int) {
+        handleTimeLimit()
+        super.onTimeout(startId)
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        handleTimeLimit()
+        super.onTimeout(startId, fgsType)
+    }
+
+    private fun handleTimeLimit() {
+        runCatching {
+            val paused = DownloadQueue.pauseAll(applicationContext)
+            JobDiag.noteStatus("fgs time limit reached, paused ${paused.size} job(s)")
+            if (paused.isNotEmpty()) publishGlobal("Paused: Android time limit — tap Resume")
+        }
+        runCatching { shutdownService() }
+    }
+
     override fun onDestroy() {
         isRunning = false
         shuttingDown = true
         stopWatchingNetwork()
+        // 2.5.5: delayed runnables outlived the service and could call startForeground on
+        // a destroyed instance.
+        runCatching { netProbeHandler.removeCallbacksAndMessages(null) }
         releaseLocks()
         // A notification posted with notify() (not startForeground) is not removed by the
         // system when the service dies, so cancel it explicitly here as well.
@@ -209,8 +238,12 @@ class DownloadService : Service() {
             }
             liveStatus.remove(job.id)
             listener?.onFinished(res)
-        } catch (_: Throwable) {
-            runCatching { DownloadQueue.finish(applicationContext, job.id) }
+        } catch (t: Throwable) {
+            // 2.5.5: finish() removed the row, so an unexpected crash lost the owner's link.
+            runCatching {
+                DownloadQueue.markFailure(applicationContext, job.id, "Internal error: " + (t.message ?: t.javaClass.simpleName))
+            }
+            runCatching { CrashLog.writeNonFatal(applicationContext, "worker", t) }
         } finally {
             synchronized(pumpLock) {
                 workerThreads.remove(Thread.currentThread())

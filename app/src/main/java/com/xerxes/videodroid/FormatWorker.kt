@@ -243,7 +243,8 @@ object FormatWorker {
         localPath: String? = null,
         id: String = "",
     ): FormatResult {
-        cancelRequested.set(false)
+        // 2.5.5: a starting job must never clear the shared cancel flag — with parallel
+        // downloads that silently un-cancelled jobs the owner had just cancelled.
         JobDiag.beginJob(opts)
         OpenPageActivity.storeJobUrl(context, url)
         val emit: (String) -> Unit = { msg ->
@@ -251,7 +252,6 @@ object FormatWorker {
             status(msg)
         }
         try {
-            Python.getInstance().getModule("dl").callAttr("set_cancelled", false)
         } catch (_: Throwable) { }
 
         // One directory per source. A shared dir used to be wiped on every
