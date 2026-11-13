@@ -2,6 +2,17 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.4 (versionCode 101)
+
+### Saved files get the name the page gave them
+
+- **Real page titles become the filename.** `[FamilyTherapyXXX] Lola Cheeks – Foot Freak` was
+  saved as an unreadable `<title>_<date>_<quality>` string. A title that already reads like a scene
+  name is now used as-is — brackets and dashes kept, site suffixes (`| porneec.com`) and marketing
+  tails dropped, filesystem-hostile characters turned into dashes.
+- **Nameless downloads keep the old scheme.** If the page gives nothing usable ("video",
+  "Untitled", a bare one-word label), the name stays `<title>_<date>_<quality>` so nothing collides.
+
 ## 2.5.3 (versionCode 100)
 
 ### Field-log fixes after 2.5.2

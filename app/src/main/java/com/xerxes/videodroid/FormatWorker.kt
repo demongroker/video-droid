@@ -1134,6 +1134,10 @@ object FormatWorker {
         val raw = title.orEmpty()
         val idMatch = Regex("\\[(\\d{10,25})\\]").find(raw)
         if (idMatch == null) {
+            // 2.5.4: a page that hands us a real scene name keeps it. Only nameless downloads fall
+            // back to <title>_<date>_<quality> (field report: "[FamilyTherapyXXX] Lola Cheeks –
+            // Foot Freak" was saved as an unreadable date/quality string).
+            PrettyName.clean(title)?.let { return it }
             // not a tweet-style name: unchanged behaviour, just sanitised
             val head = shortTitle(title)
             // "video" means the extractor gave us nothing usable (a direct MP4 resolved by the
