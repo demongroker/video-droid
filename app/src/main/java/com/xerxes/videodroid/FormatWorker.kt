@@ -388,18 +388,17 @@ object FormatWorker {
                                     }.getOrDefault(false),
                                 )
                             }
-                            // 2.5.1: tiny clips from a foreign CDN mean the real video lives behind
-                            // an embedded player the static sniffer cannot see. Do not auto-download
-                            // an ad — send the owner to the Scan page picker instead.
-                            if (CandidatePicker.onlyTinyForeign(pickable)) {
-                                val msg = "Only small clips on this page — try Scan page"
-                                emit(msg)
-                                JobDiag.noteStatus("fallback: only tiny foreign clips, scan sheet suggested")
-                                JobDiag.finishJob()
-                                return FormatResult(false, msg)
+                            // 2.5.2: tiny clips from a foreign CDN mean the real video lives behind
+                            // an embedded player the static sniffer cannot see. Do NOT download the
+                            // clip — skip the static candidate and let the WebView sniffer look for
+                            // the real media, which is what the owner is watching in the browser.
+                            val tinyForeign = CandidatePicker.onlyTinyForeign(pickable)
+                            if (tinyForeign) {
+                                emit("Only small clips here — scanning the page properly…")
+                                JobDiag.noteStatus("fallback: tiny foreign clips, skipping static candidate")
                             }
-                            val ranked = CandidatePicker.choose(pickable)?.url
-                            var found = (ranked ?: MediaUrlParser.pickBest(candidates))?.let { mediaUrl ->
+                            val ranked = if (tinyForeign) null else CandidatePicker.choose(pickable)?.url
+                            var found = (ranked ?: if (tinyForeign) null else MediaUrlParser.pickBest(candidates))?.let { mediaUrl ->
                                 SniffedMedia(mediaUrl, page.title, page.finalUrl, PageSniffer.DESKTOP_UA)
                             }
                             if (found != null) usedPath = "static"

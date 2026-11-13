@@ -2,6 +2,16 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.3 (versionCode 100)
+
+### Field-log fixes after 2.5.2
+
+- **The guard now keeps looking instead of giving up.** 2.5.2 correctly refused to download the
+  foreign-CDN clip, but then stopped and asked you to run Scan yourself. Now it skips that
+  candidate and drives the **WebView sniffer** on the page, which is where the video you are
+  actually watching in the browser lives. Only if the sniffer also finds nothing do you see
+  "Only small clips on this page — try Scan page".
+
 ## 2.5.2 (versionCode 99)
 
 ### Field-log fixes after 2.5.1
