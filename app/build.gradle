@@ -195,7 +195,7 @@ dependencies {
     implementation 'io.github.maitrungduc1410:ffmpeg-kit-video:7.1.5'
 
     // Coil for images
-    implementation 'io.coil-kt:coil-compose:2.4.0'
+    implementation 'io.coil-kt:coil-compose:2.7.0'
 
     // Serialization
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
