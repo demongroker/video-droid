@@ -14,6 +14,16 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!--
+      Android 11+ package visibility: without this, getPackageInfo("app.vela.player")
+      throws NameNotFoundException even when Vela is installed, so PlayerChoice.velaInstalled()
+      stayed false and "Play in Vela" never appeared. Deliberately a single-package query —
+      no QUERY_ALL_PACKAGES.
+    -->
+    <queries>
+        <package android:name="app.vela.player" />
+    </queries>
+
     <application
         android:name=".App"
         android:label="VideoDroid"

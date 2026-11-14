@@ -23,11 +23,23 @@ object PlayerChoice {
     /** Intent for Vela, or null when it is not installed. */
     fun velaIntent(ctx: Context, uri: Uri): Intent? {
         if (!velaInstalled(ctx)) return null
-        return Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "video/*")
-            setPackage(VELA_PACKAGE)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        return velaIntentFor(uri)
+    }
+
+    /**
+     * The Vela intent itself, without the install check.
+     *
+     * Split out because it is the part a unit test can pin down exactly: target
+     * package, action, MIME type, grant flags, and the ClipData that makes the
+     * URI grant reliable for players that read the clip instead of the data URI.
+     */
+    fun velaIntentFor(uri: Uri): Intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "video/*")
+        setPackage(VELA_PACKAGE)
+        // Android 11+ drops a bare FLAG_GRANT_READ_URI_PERMISSION for some
+        // receivers; carrying the URI in ClipData makes the grant explicit.
+        clipData = android.content.ClipData.newRawUri("video", uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     fun systemIntent(uri: Uri): Intent = Intent(Intent.ACTION_VIEW).apply {
