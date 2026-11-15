@@ -789,6 +789,28 @@ object FormatWorker {
     private class NoMediaOnPageException : Exception("No downloadable video found on this page")
 
     /**
+     * Host of a shared link, lowercased; empty string when there isn't one.
+     *
+     * Only used to decide which advice to show — it never decides whether a download is allowed.
+     */
+    internal fun hostOf(url: String?): String {
+        val raw = url?.trim().orEmpty()
+        if (raw.isEmpty()) return ""
+        val withScheme = if (raw.contains("://")) raw else "https://$raw"
+        return runCatching { java.net.URI(withScheme).host?.lowercase().orEmpty() }.getOrDefault("")
+    }
+
+    /** x.com / twitter.com and their subdomains are the only hosts that need X cookies. */
+    internal fun isXHost(host: String): Boolean =
+        host == "x.com" || host == "twitter.com" ||
+            host.endsWith(".x.com") || host.endsWith(".twitter.com")
+
+    /** Any YouTube surface whose "sign in" is a bot check, not an X problem. */
+    internal fun isYouTubeHost(host: String): Boolean =
+        host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")
+
+    /**
      * Turn a raw yt-dlp error into something the owner can act on.
      *
      * [url] matters for the X/Twitter cases: yt-dlp says "No video in this tweet" both for a
@@ -841,7 +863,15 @@ object FormatWorker {
             || s.contains("authentication") || s.contains("private video")
             || s.contains("confirm you’re not a bot") || s.contains("confirm you're not a bot")
         ) {
-            return "Need X login"
+            // The host decides the advice. A YouTube bot check is not an X login problem, and
+            // sending people to "Settings → Log in to X" for a youtu.be link was simply wrong.
+            val host = hostOf(url)
+            return when {
+                isXHost(host) -> "Need X login"
+                isYouTubeHost(host) ->
+                    "YouTube is asking for a sign-in — the network looks automated. Try again later."
+                else -> "Site needs sign-in."
+            }
         }
         if (s.contains("unknown host") || s.contains("unable to resolve")
             || s.contains("network is unreachable") || s.contains("failed to connect")
