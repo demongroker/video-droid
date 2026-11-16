@@ -297,7 +297,7 @@ class QueueActivity : AppCompatActivity() {
             // underneath it where they can be scanned without reading the whole row.
             val online = isOnline()
             val state = when {
-                job.failed -> "Failed — ${ErrorText.human(job.failReason.ifBlank { "tap retry" })}"
+                job.failed -> "Failed — ${ErrorText.human(job.failReason.ifBlank { "tap retry" }, job.url)}"
                 job.paused -> if (job.progress > 0) "Paused · ${job.progress}%" else "Paused"
                 running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
                 !online -> "Waiting for connection"
