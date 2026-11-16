@@ -44,6 +44,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Share target that opens the screen so the user can pick options. Same filters the
+             activity itself used to carry; an alias keeps the launcher label "VideoDroid". -->
+        <activity-alias
+            android:name=".ShareWithOptions"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:label="VideoDroid (choose options)">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -51,6 +60,23 @@
             </intent-filter>
             <!-- Stage 2: some share sheets (YouTube, Instagram, browsers) send text/html or
                  text/uri-list rather than text/plain, and were silently ignored. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- One-tap share: queues the link with the saved defaults and finishes. No window,
+             no recents entry, its own task so nothing is left behind. -->
+        <activity
+            android:name=".QuickShareActivity"
+            android:exported="true"
+            android:label="VideoDroid"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="com.xerxes.videodroid.quickshare"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
