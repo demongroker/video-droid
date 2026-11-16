@@ -19,7 +19,7 @@ object ErrorText {
 
             m.contains("needxlogin") || m.contains("login required") ||
                 m.contains("requires authentication") || m.contains("sign in to confirm") ->
-                signInAdvice(url)
+                signInAdvice(raw, url)
 
             m.contains("private") && m.contains("video") -> "This video is private"
             m.contains("removed") || m.contains("deleted") || m.contains("404") ->
@@ -52,12 +52,15 @@ object ErrorText {
      * fixes X, and nothing on this phone fixes YouTube's automated-traffic check. Reuses the same
      * classifiers FormatWorker uses so the Queue and the job error can never disagree.
      */
-    private fun signInAdvice(url: String?): String {
+    private fun signInAdvice(raw: String, url: String?): String {
         val host = FormatWorker.hostOf(url)
         return when {
             FormatWorker.isXHost(host) -> "Needs an X login — Settings → Log in to X"
             FormatWorker.isYouTubeHost(host) ->
                 "YouTube is asking for a sign-in — the network looks automated. Try again later."
+            // No usable URL, but the extractor itself named X: that error can only come from X,
+            // so keep the X advice instead of falling back to the generic line.
+            raw.lowercase().contains("needxlogin") -> "Needs an X login — Settings → Log in to X"
             else -> "Site needs sign-in."
         }
     }
