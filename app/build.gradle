@@ -70,12 +70,11 @@ android {
 
     buildTypes {
         debug {
-            // Owner installs these builds over the released app, so a debug APK has to carry
-            // the same release certificate — a plain debug-keystore APK fails with
-            // INSTALL_FAILED_UPDATE_INCOMPATIBLE. Still debuggable, still unminified.
-            if (signingConfigs.release.storeFile != null) {
-                signingConfig signingConfigs.release
-            }
+            // Debug builds use the default debug keystore, not the release one: a broken or
+            // missing release keystore must never block a debug build. Consequence: a debug APK
+            // carries a different certificate than the released app, so it installs alongside it
+            // rather than over it — use assembleRelease for anything that must upgrade in place.
+            signingConfig signingConfigs.debug
         }
         release {
             // Shrink the ~61 MB APK: R8 tree-shaking + resource shrinking.
