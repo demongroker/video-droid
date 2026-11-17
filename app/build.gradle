@@ -24,7 +24,7 @@ tasks.configureEach { t ->
 
 android {
     namespace 'com.xerxes.videodroid'
-    compileSdk 36
+    compileSdk 37
 
     defaultConfig {
         applicationId "com.xerxes.videodroid"
