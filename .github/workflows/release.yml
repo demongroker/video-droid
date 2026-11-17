@@ -237,9 +237,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   screenshots:
-    if: "!startsWith(github.ref, 'refs/tags/')"
-    # Runner has no /dev/kvm, so the emulator is software-rendered and can
-    # throw a system ANR over the app. Experimental: must never block a merge.
+    # Opt-in only. The GitHub runner has no /dev/kvm, so the AVD is software-rendered and
+    # system_server regularly raises an ANR over the app — the job was failing on every push
+    # and painting a red check that meant nothing (continue-on-error kept it harmless, but a
+    # permanently-red check trains people to ignore red). Run it by hand from the Actions tab
+    # when you actually want the screenshots; capture-screenshots.sh still fails honestly
+    # instead of shipping a picture of a dialog.
+    if: github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
