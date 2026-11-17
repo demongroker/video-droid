@@ -193,7 +193,7 @@ dependencies {
     implementation "androidx.navigation:navigation-ui-ktx:$nav_version"
 
     // FFmpeg
-    implementation 'io.github.maitrungduc1410:ffmpeg-kit-video:7.1.5'
+    implementation 'io.github.maitrungduc1410:ffmpeg-kit-video:9.0.2'
 
     // Coil for images
     implementation 'io.coil-kt:coil-compose:2.4.0'
