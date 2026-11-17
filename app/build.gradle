@@ -157,7 +157,7 @@ dependencies {
     // runtime-saved-instance-state may not be in this BOM version
 
     // Coroutines & Flow
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
 
     // Media3 ExoPlayer
