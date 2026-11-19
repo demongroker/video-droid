@@ -2,6 +2,18 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.5.8 (versionCode 105)
+
+### Dependency refresh
+
+- **ffmpeg-kit-video 7.1.5 → 9.0.2** (the big one — remux/transcode engine; playback sanity
+  check recommended after updating).
+- Room 2.6.1 → 2.8.5; Kotlin Compose compiler plugin 2.0.21 → 2.4.21;
+  kotlinx-coroutines-android bump.
+- CI tooling: checkout 7, setup-java 6, upload-artifact 7, download-artifact 8.0.2,
+  setup-gradle 6.4.1, action-gh-release 3.0.4.
+- No behaviour changes intended; this release exists to ship the merged bumps safely.
+
 ## 2.5.7 (versionCode 104)
 
 ### Fix: the update prompt no longer fights the app
