@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xerxes.videodroid.QueuedJob
 import com.xerxes.videodroid.ui.theme.LocalVdTones
+import com.xerxes.videodroid.ui.theme.vdCardBorder
 
 /**
  * The queue, in Compose.
@@ -160,6 +161,7 @@ fun QueueScreen(
           colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
           ),
+          border = vdCardBorder,
         ) {
           Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xerxes.videodroid.LibraryFormat
 import com.xerxes.videodroid.ui.theme.LocalVdTones
+import com.xerxes.videodroid.ui.theme.vdCardBorder
 
 /** One finished download as the Library sees it. [id] is the MediaStore row id. */
 data class LibraryItem(
@@ -229,6 +230,7 @@ private fun LibraryCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
+        border = vdCardBorder,
     ) {
         Column {
             Box {

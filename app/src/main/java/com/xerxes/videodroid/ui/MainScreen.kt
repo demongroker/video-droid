@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xerxes.videodroid.R
 import com.xerxes.videodroid.ui.theme.LocalVdTones
+import com.xerxes.videodroid.ui.theme.vdCardBorder
 
 /**
  * The Download (Main) screen, in Compose.
@@ -118,6 +119,7 @@ fun MainScreen(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
+            border = vdCardBorder,
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
@@ -160,6 +162,7 @@ fun MainScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
+                border = vdCardBorder,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
@@ -193,6 +196,7 @@ fun MainScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
+                border = vdCardBorder,
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 14.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
@@ -255,6 +259,7 @@ fun MainScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
+                border = vdCardBorder,
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
