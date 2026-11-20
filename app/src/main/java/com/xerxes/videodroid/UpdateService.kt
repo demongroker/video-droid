@@ -132,19 +132,52 @@ class UpdateService : Service() {
                 val etag = File(cacheDir, "VideoDroid-update.apk.etag")
                     .takeIf { it.exists() }?.readText()?.trim()
 
+                // Speed sampling + throttled state publishing: onProgress fires per 64 KB
+                // chunk, so writing prefs on every callback would hammer the disk. Publish
+                // when the percent changes or at least every 500 ms.
+                var lastSampleAt = 0L
+                var lastSampleBytes = 0L
+                var speedEma = 0L
+                var lastPublishedPct = -1
+                var lastPublishedAt = 0L
+
                 val result = UpdateDownloader().download(
                     url = url,
                     dest = dest,
                     etag = etag,
                     onProgress = { done, total ->
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (lastSampleAt == 0L) {
+                            lastSampleAt = now
+                            lastSampleBytes = done
+                        }
+                        val dt = now - lastSampleAt
+                        if (dt >= 500) {
+                            val inst = ((done - lastSampleBytes) * 1000) / dt
+                            speedEma = if (speedEma == 0L) inst else (speedEma * 3 + inst) / 4
+                            lastSampleAt = now
+                            lastSampleBytes = done
+                        }
                         val pct = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else -1
-                        if (pct >= 0) UpdateState.progress(this@UpdateService, pct)
+                        if (pct != lastPublishedPct || now - lastPublishedAt >= 500) {
+                            UpdateState.progress(
+                                this@UpdateService,
+                                pct.coerceAtLeast(0),
+                                done,
+                                total,
+                                speedEma,
+                            )
+                            lastPublishedPct = pct
+                            lastPublishedAt = now
+                        }
                         nm.notify(NOTIF_ID, progressNotification(version, pct, done, null))
                     },
                     isCancelled = { cancelled.get() },
                 )
 
                 if (cancelled.get()) {
+                    // The `.part` file and its ETag stay on disk: the next attempt resumes
+                    // from the same byte offset instead of starting over.
                     UpdateState.reset(this@UpdateService)
                     nm.cancel(NOTIF_ID)
                     return@Thread
@@ -155,6 +188,7 @@ class UpdateService : Service() {
                     nm.notify(NOTIF_ID, failureNotification(version, reason))
                     return@Thread
                 }
+                UpdateState.verifyStep(this@UpdateService, com.xerxes.videodroid.ui.UpdateVerifyStep.SIGNATURE)
                 if (!UpdateChecker.verifyApkSignature(this@UpdateService, result.file)) {
                     result.file.delete()
                     UpdateState.markFailed(this@UpdateService, version, "signature mismatch — refused")
@@ -164,6 +198,7 @@ class UpdateService : Service() {
                 // Integrity before anything is offered to the user: the release
                 // publishes `<asset>.apk.sha256`; a mismatch is a hard failure and
                 // a missing checksum is refused rather than trusted.
+                UpdateState.verifyStep(this@UpdateService, com.xerxes.videodroid.ui.UpdateVerifyStep.CHECKSUM)
                 val expected = fetchPublishedSha256(url)
                 if (expected == null) {
                     result.file.delete()
@@ -178,6 +213,7 @@ class UpdateService : Service() {
                     nm.notify(NOTIF_ID, failureNotification(version, "checksum mismatch — refused"))
                     return@Thread
                 }
+                UpdateState.progress(this@UpdateService, 100, result.bytes, result.bytes, 0L)
                 UpdateState.markVerified(this@UpdateService, version)
                 nm.notify(NOTIF_ID, readyNotification(version, result.file))
             } catch (e: Throwable) {

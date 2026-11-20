@@ -26,6 +26,10 @@ object UpdateState {
     private const val KEY_JOB_PERCENT = "jobPercent"
     private const val KEY_JOB_ERROR = "jobError"
     private const val KEY_WIFI_ONLY = "wifiOnly"
+    private const val KEY_JOB_BYTES_DONE = "jobBytesDone"
+    private const val KEY_JOB_BYTES_TOTAL = "jobBytesTotal"
+    private const val KEY_JOB_SPEED_BPS = "jobSpeedBps"
+    private const val KEY_JOB_VERIFY_STEP = "jobVerifyStep"
 
     /** "Download on Wi-Fi only" — ON by default: at sea, mobile data is expensive. */
     const val DEFAULT_WIFI_ONLY = true
@@ -59,17 +63,46 @@ object UpdateState {
 
     fun jobError(context: Context): String? = prefs(context).getString(KEY_JOB_ERROR, null)
 
+    fun jobBytesDone(context: Context): Long = prefs(context).getLong(KEY_JOB_BYTES_DONE, 0L)
+    fun jobBytesTotal(context: Context): Long = prefs(context).getLong(KEY_JOB_BYTES_TOTAL, -1L)
+    fun jobSpeedBps(context: Context): Long = prefs(context).getLong(KEY_JOB_SPEED_BPS, 0L)
+    fun jobVerifyStep(context: Context): com.xerxes.videodroid.ui.UpdateVerifyStep =
+        com.xerxes.videodroid.ui.UpdateVerifyStep.parse(prefs(context).getString(KEY_JOB_VERIFY_STEP, null))
+
     fun beginDownload(context: Context, version: String) {
         prefs(context).edit()
             .putString(KEY_JOB_VERSION, version)
             .putString(KEY_JOB_STATE, UpdateJobState.DOWNLOADING.name)
             .putInt(KEY_JOB_PERCENT, 0)
+            .putLong(KEY_JOB_BYTES_DONE, 0L)
+            .putLong(KEY_JOB_BYTES_TOTAL, -1L)
+            .putLong(KEY_JOB_SPEED_BPS, 0L)
+            .putString(KEY_JOB_VERIFY_STEP, com.xerxes.videodroid.ui.UpdateVerifyStep.NONE.name)
             .remove(KEY_JOB_ERROR)
             .apply()
     }
 
-    fun progress(context: Context, percent: Int) {
-        prefs(context).edit().putInt(KEY_JOB_PERCENT, percent.coerceIn(0, 100)).apply()
+    /**
+     * Publish transfer progress. The byte/speed fields are optional so the original
+     * percent-only call sites keep working; -1 means "leave the stored value alone".
+     */
+    fun progress(
+        context: Context,
+        percent: Int,
+        doneBytes: Long = -1L,
+        totalBytes: Long = -1L,
+        speedBps: Long = -1L,
+    ) {
+        val ed = prefs(context).edit().putInt(KEY_JOB_PERCENT, percent.coerceIn(0, 100))
+        if (doneBytes >= 0) ed.putLong(KEY_JOB_BYTES_DONE, doneBytes)
+        if (totalBytes >= 0) ed.putLong(KEY_JOB_BYTES_TOTAL, totalBytes)
+        if (speedBps >= 0) ed.putLong(KEY_JOB_SPEED_BPS, speedBps)
+        ed.apply()
+    }
+
+    /** Which fail-closed verification step is running (signature, then published checksum). */
+    fun verifyStep(context: Context, step: com.xerxes.videodroid.ui.UpdateVerifyStep) {
+        prefs(context).edit().putString(KEY_JOB_VERIFY_STEP, step.name).apply()
     }
 
     fun markVerified(context: Context, version: String) {
@@ -77,6 +110,8 @@ object UpdateState {
             .putString(KEY_JOB_VERSION, version)
             .putString(KEY_JOB_STATE, UpdateJobState.VERIFIED.name)
             .putInt(KEY_JOB_PERCENT, 100)
+            .putLong(KEY_JOB_SPEED_BPS, 0L)
+            .putString(KEY_JOB_VERIFY_STEP, com.xerxes.videodroid.ui.UpdateVerifyStep.NONE.name)
             .remove(KEY_JOB_ERROR)
             .apply()
     }
@@ -94,6 +129,10 @@ object UpdateState {
             .remove(KEY_JOB_VERSION)
             .putString(KEY_JOB_STATE, UpdateJobState.IDLE.name)
             .putInt(KEY_JOB_PERCENT, 0)
+            .putLong(KEY_JOB_BYTES_DONE, 0L)
+            .putLong(KEY_JOB_BYTES_TOTAL, -1L)
+            .putLong(KEY_JOB_SPEED_BPS, 0L)
+            .putString(KEY_JOB_VERIFY_STEP, com.xerxes.videodroid.ui.UpdateVerifyStep.NONE.name)
             .remove(KEY_JOB_ERROR)
             .apply()
     }

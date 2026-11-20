@@ -2,6 +2,35 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.7.0 (versionCode 107)
+
+### Library + Download rebuilt in Compose — navy + gold everywhere
+
+- **The Library screen is Compose now** (`ui/LibraryScreen.kt`): thumbnail grid or list (the
+  toggle is remembered), sort menu (newest / largest / name), storage bar, duration/size badges,
+  long-press multi-select with Share / Move / Delete, and an empty state with a "Go to Download"
+  button. The biometric lock gate is unchanged: no thumbnail or name renders before unlock.
+- **The Download screen is Compose now** (`ui/MainScreen.kt`): paste bar with clipboard offer,
+  quality pills, social presets, Options sheet trigger, page scan, and a job card whose state
+  line carries the failure reason — never the title. The state pill says what is actually true
+  ("ready" when the queue is drained, never a stuck "working").
+- **Updater progress sheet** (`ui/UpdateSheet.kt`): a proper bottom sheet with percent, size
+  (done of total), live speed, and the verification steps ("Verifying signature…", "Checking
+  checksum…") before Install is offered. Cancel keeps the `.part` file so the next attempt
+  resumes where it left off. A header chip ("Update 42%" / "Update ready" / "Update failed")
+  reopens the sheet at any time.
+- Screen copy and rules moved into pure, unit-tested objects mirroring QueueCopy:
+  `MainCopy` (12 tests), `LibraryCopy` (11 tests), `UpdateSheetCopy` (12 tests), plus
+  `UpdateStateProgressTest` (8 tests) pinning the persisted byte/speed/step round-trip.
+
+### Unchanged on purpose
+
+Duplicate refusal still happens BEFORE any download intent; pause keeps the partial file and
+progress; cancel asks first and stops only that row; the updater stays single-flight and
+fail-closed on signing-pin or checksum mismatch (a release with no published checksum is
+refused); MP4/MKV only. Move still copies and hash-verifies before removing the original;
+delete still confirms twice on Android 11+. The bottom navigation is still the shared XML bar.
+
 ## 2.6.0 (versionCode 106)
 
 ### Queue rebuilt in Compose — navy + gold

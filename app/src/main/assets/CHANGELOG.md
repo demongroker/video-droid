@@ -2,6 +2,61 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.7.0 (versionCode 107)
+
+### Library + Download rebuilt in Compose — navy + gold everywhere
+
+- **The Library screen is Compose now** (`ui/LibraryScreen.kt`): thumbnail grid or list (the
+  toggle is remembered), sort menu (newest / largest / name), storage bar, duration/size badges,
+  long-press multi-select with Share / Move / Delete, and an empty state with a "Go to Download"
+  button. The biometric lock gate is unchanged: no thumbnail or name renders before unlock.
+- **The Download screen is Compose now** (`ui/MainScreen.kt`): paste bar with clipboard offer,
+  quality pills, social presets, Options sheet trigger, page scan, and a job card whose state
+  line carries the failure reason — never the title. The state pill says what is actually true
+  ("ready" when the queue is drained, never a stuck "working").
+- **Updater progress sheet** (`ui/UpdateSheet.kt`): a proper bottom sheet with percent, size
+  (done of total), live speed, and the verification steps ("Verifying signature…", "Checking
+  checksum…") before Install is offered. Cancel keeps the `.part` file so the next attempt
+  resumes where it left off. A header chip ("Update 42%" / "Update ready" / "Update failed")
+  reopens the sheet at any time.
+- Screen copy and rules moved into pure, unit-tested objects mirroring QueueCopy:
+  `MainCopy` (12 tests), `LibraryCopy` (11 tests), `UpdateSheetCopy` (12 tests), plus
+  `UpdateStateProgressTest` (8 tests) pinning the persisted byte/speed/step round-trip.
+
+### Unchanged on purpose
+
+Duplicate refusal still happens BEFORE any download intent; pause keeps the partial file and
+progress; cancel asks first and stops only that row; the updater stays single-flight and
+fail-closed on signing-pin or checksum mismatch (a release with no published checksum is
+refused); MP4/MKV only. Move still copies and hash-verifies before removing the original;
+delete still confirms twice on Android 11+. The bottom navigation is still the shared XML bar.
+
+## 2.6.0 (versionCode 106)
+
+### Queue rebuilt in Compose — navy + gold
+
+- **The queue screen is Compose now** (`ui/QueueScreen.kt`), the first slice of the app-wide
+  migration away from the XML/Compose hybrid. The Activity keeps every side effect; the screen
+  only renders state and reports intent.
+- **New theme** (`ui/theme/VideoDroidTheme.kt`): navy + gold, real dark and light schemes, one
+  type scale, 12 dp cards / 8 dp controls. Same tokens as Hermes 0.1.4.
+- **Rows are cards**: thumbnail + real title, a colour-coded state line (amber paused/waiting,
+  gold downloading, red failed), quality and live speed/ETA underneath, and a progress bar.
+- **Swipe gestures replaced by visible buttons.** Share and Cancel/Remove are now explicit, so
+  a mis-swipe can no longer remove a row. Open appears when there is a finished file.
+- **Empty state** says what to do next ("Paste a link on the Download tab") with a button that
+  goes there, instead of a bare line of text.
+- **Bulk actions in a menu**: Retry failed (n) / Clear failed (n) / Clear all, unchanged behaviour.
+- Row copy and action rules moved into a pure, unit-tested object (`QueueCopy`, 14 tests):
+  the failure reason stays in the state line, offline is exactly "Waiting for connection",
+  a failed row says Remove and has no Pause, and Retry appears only for retryable errors.
+
+### Unchanged on purpose
+
+Pause still keeps the partial file, Cancel still asks first and stops only that row, the
+1-second refresh cadence, the persisted FIFO, and the bottom navigation (still the shared XML
+bar — it migrates with the other tabs).
+
 ## 2.5.8 (versionCode 105)
 
 ### Dependency refresh

@@ -13,66 +13,47 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.DocumentsContract
 import android.provider.MediaStore
-import android.util.Size
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.BaseAdapter
-import android.widget.GridView
-import android.widget.ImageView
-import android.widget.PopupMenu
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.xerxes.videodroid.ui.Insets
+import com.xerxes.videodroid.ui.LibraryCopy
+import com.xerxes.videodroid.ui.LibraryItem
+import com.xerxes.videodroid.ui.LibraryScreen
+import com.xerxes.videodroid.ui.LibrarySort
+import com.xerxes.videodroid.ui.theme.VideoDroidTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 /**
- * Finished downloads: thumbnail grid with a storage bar, sort, duration/size badges,
+ * Finished downloads: thumbnail grid/list with a storage bar, sort, duration/size badges,
  * long-press multi-select (share / move / delete) and an optional biometric lock.
  *
- * Nothing here deletes anything without an explicit confirmation, and "move" always copies
- * and verifies before the source row is removed.
+ * The screen is Compose ([LibraryScreen]); this Activity owns every side effect. Nothing here
+ * deletes anything without an explicit confirmation, and "move" always copies and verifies
+ * (byte-for-byte hash) before the source row is removed. While the lock gate is pending, no
+ * thumbnail or name is rendered at all.
  */
 class LibraryActivity : AppCompatActivity() {
 
-    private data class Item(
-        val uri: Uri,
-        val name: String,
-        val size: Long,
-        val durationMs: Long,
-        val dateAdded: Long,
-    ) {
-        val id: Long get() = uri.lastPathSegment?.toLongOrNull() ?: -1L
-    }
+    // Compose state: reload() and the selection actions write these; no adapter, no notifyDataSetChanged.
+    private val items = mutableStateOf<List<LibraryItem>>(emptyList())
+    private val selected = mutableStateOf<Set<Long>>(emptySet())
+    internal val sortState = mutableStateOf(LibrarySort.DATE)
+    internal val listMode = mutableStateOf(false)
+    private val ready = mutableStateOf(false)
+    private val storageTextState = mutableStateOf("")
+    private val storagePercentState = mutableIntStateOf(0)
 
-    private enum class Sort(val pref: String, val label: String) {
-        DATE("date", "Sort: newest"),
-        SIZE("size", "Sort: largest"),
-        NAME("name", "Sort: name"),
-    }
-
-    private lateinit var grid: GridView
-    private lateinit var empty: View
-    private lateinit var selectionBar: View
-    private lateinit var selectionCount: TextView
-    private lateinit var sortButton: TextView
-
-    private var items: List<Item> = emptyList()
     private var moving = false
-    private var sort = Sort.DATE
-    private val selected = LinkedHashSet<Long>()
-    private var adapter: GridAdapter? = null
-    private lateinit var viewToggleButton: TextView
-    private var listMode = false
 
     private val movePicker =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -96,7 +77,8 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Stage 4: thumbnails must never appear in the recent-apps snapshot.
+        // Stage 4: thumbnails must never appear in the recent-apps snapshot. The Library is
+        // always secure, independent of the SECURE_SCREENS setting used by the other screens.
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE,
@@ -105,43 +87,34 @@ class LibraryActivity : AppCompatActivity() {
         Insets.applyTo(findViewById(R.id.libraryRoot))
         NavHelper.sync(this, R.id.tab_library)
 
-        grid = findViewById(R.id.libraryGrid)
-        empty = findViewById(R.id.libraryEmpty)
-        selectionBar = findViewById(R.id.librarySelectionBar)
-        selectionCount = findViewById(R.id.librarySelectionCount)
-        sortButton = findViewById(R.id.librarySort)
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        sortState.value = LibrarySort.fromPref(prefs.getString(KEY_SORT, "date"))
+        listMode.value = prefs.getBoolean(KEY_LIST_MODE, false)
 
-        sort = Sort.entries.firstOrNull {
-            it.pref == getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SORT, "date")
-        } ?: Sort.DATE
-        renderSortButton()
-
-        grid.setOnItemClickListener { _, _, position, _ ->
-            val item = items.getOrNull(position) ?: return@setOnItemClickListener
-            if (selected.isNotEmpty()) toggleSelection(item) else open(item)
+        findViewById<ComposeView>(R.id.libraryCompose).setContent {
+            VideoDroidTheme {
+                LibraryScreen(
+                    items = items.value,
+                    ready = ready.value,
+                    listMode = listMode.value,
+                    sort = sortState.value,
+                    selectedIds = selected.value,
+                    storageText = storageTextState.value,
+                    storagePercent = storagePercentState.intValue,
+                    loadThumb = { item, iv -> LibraryThumbLoader.load(this, item.uri, iv) },
+                    onOpen = { item -> open(item) },
+                    onToggleSelect = { item -> toggleSelection(item) },
+                    onSort = { entry -> applySort(entry) },
+                    onToggleView = { toggleViewMode() },
+                    onFindDuplicates = { scanDuplicates() },
+                    onShareSelected = { shareSelected() },
+                    onMoveSelected = { pickMoveTarget() },
+                    onDeleteSelected = { confirmDeleteSelected() },
+                    onClearSelection = { clearSelection() },
+                    onGoDownload = { goDownload() },
+                )
+            }
         }
-        grid.setOnItemLongClickListener { _, _, position, _ ->
-            items.getOrNull(position)?.let { toggleSelection(it) }
-            true
-        }
-
-        findViewById<View>(R.id.findDuplicates).setOnClickListener { scanDuplicates() }
-        sortButton.setOnClickListener { showSortMenu() }
-        viewToggleButton = findViewById(R.id.libraryViewToggle)
-        listMode = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_LIST_MODE, false)
-        applyViewMode()
-        viewToggleButton.setOnClickListener {
-            listMode = !listMode
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putBoolean(KEY_LIST_MODE, listMode).apply()
-            Haptics.tick(this)
-            applyViewMode()
-        }
-
-        findViewById<View>(R.id.librarySelShare).setOnClickListener { shareSelected() }
-        findViewById<View>(R.id.librarySelMove).setOnClickListener { pickMoveTarget() }
-        findViewById<View>(R.id.librarySelDelete).setOnClickListener { confirmDeleteSelected() }
-        findViewById<View>(R.id.librarySelClose).setOnClickListener { clearSelection() }
 
         updateStorage()
         gateThenLoad()
@@ -150,25 +123,22 @@ class LibraryActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         NavHelper.sync(this, R.id.tab_library)
-        if (unlocked) reload()
+        if (ready.value) reload()
     }
 
     // ---- lock gate ---------------------------------------------------------------
 
-    private var unlocked = false
-
     private fun gateThenLoad() {
         if (!LibraryLock.enabled(this)) {
-            unlocked = true
+            ready.value = true
             reload()
             return
         }
-        grid.visibility = View.INVISIBLE
-        empty.visibility = View.GONE
+        ready.value = false
         LibraryLock.authenticate(
             this,
             onSuccess = {
-                unlocked = true
+                ready.value = true
                 reload()
             },
             onFail = {
@@ -178,7 +148,7 @@ class LibraryActivity : AppCompatActivity() {
             onNoCredential = {
                 // No screen lock on the device: the gate cannot be enforced. Say so and open.
                 toast("Set a phone PIN or fingerprint to lock the Library")
-                unlocked = true
+                ready.value = true
                 reload()
             },
         )
@@ -190,72 +160,55 @@ class LibraryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) { loadItems() }
             if (isFinishing || isDestroyed) return@launch
-            items = sortItems(loaded)
-            adapter = GridAdapter(items).also { grid.adapter = it }
-            grid.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
-            empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            items.value = sortItems(loaded)
             updateStorage()
-            syncSelectionUi()
         }
     }
 
-    private fun sortItems(list: List<Item>): List<Item> = when (sort) {
-        Sort.DATE -> list.sortedByDescending { it.dateAdded }
-        Sort.SIZE -> list.sortedByDescending { it.size }
-        Sort.NAME -> list.sortedBy { it.name.lowercase() }
+    private fun sortItems(list: List<LibraryItem>): List<LibraryItem> =
+        LibraryCopy.sort(list, sortState.value, { it.dateAdded }, { it.size }, { it.name })
+
+    private fun applySort(entry: LibrarySort) {
+        sortState.value = entry
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SORT, entry.pref).apply()
+        items.value = sortItems(items.value)
     }
 
     /** Grid (2 columns) or a single-column list; remembered between launches. */
-    private fun applyViewMode() {
-        grid.numColumns = if (listMode) 1 else 2
-        viewToggleButton.text = if (listMode) "Grid" else "List"
+    private fun toggleViewMode() {
+        listMode.value = !listMode.value
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(KEY_LIST_MODE, listMode.value).apply()
+        Haptics.tick(this)
     }
 
-    private fun renderSortButton() {
-        sortButton.text = sort.label
-    }
-
-    private fun showSortMenu() {
-        val popup = PopupMenu(this, sortButton)
-        Sort.entries.forEach { popup.menu.add(0, it.ordinal, it.ordinal, it.label) }
-        popup.setOnMenuItemClickListener { mi ->
-            sort = Sort.entries[mi.itemId]
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SORT, sort.pref).apply()
-            renderSortButton()
-            items = sortItems(items)
-            adapter?.let { it.rows = items; it.notifyDataSetChanged() }
-            true
-        }
-        popup.show()
-    }
-
-    private fun open(item: Item) {
+    private fun open(item: LibraryItem) {
         // Vela when it is installed, otherwise the system player, otherwise share.
         if (PlayerChoice.play(this, item.uri)) return
         shareOne(item.uri)
     }
 
+    private fun goDownload() {
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
+        finish()
+    }
+
     // ---- selection ----------------------------------------------------------------
 
-    private fun toggleSelection(item: Item) {
-        if (!selected.add(item.id)) selected.remove(item.id)
-        adapter?.notifyDataSetChanged()
-        syncSelectionUi()
+    private fun toggleSelection(item: LibraryItem) {
+        val next = selected.value.toMutableSet()
+        if (!next.add(item.id)) next.remove(item.id)
+        selected.value = next
     }
 
     private fun clearSelection() {
-        selected.clear()
-        adapter?.notifyDataSetChanged()
-        syncSelectionUi()
+        selected.value = emptySet()
     }
 
-    private fun syncSelectionUi() {
-        val n = selected.size
-        selectionBar.visibility = if (n == 0) View.GONE else View.VISIBLE
-        selectionCount.text = Texts.selected(n)
-    }
-
-    private fun selectedItems(): List<Item> = items.filter { selected.contains(it.id) }
+    private fun selectedItems(): List<LibraryItem> = items.value.filter { selected.value.contains(it.id) }
 
     private fun shareSelected() {
         val uris = ArrayList(selectedItems().map { it.uri })
@@ -313,7 +266,7 @@ class LibraryActivity : AppCompatActivity() {
         moving = true
         val progress = MaterialAlertDialogBuilder(this)
             .setTitle("Moving…")
-            .setMessage("${targets.size} file${if (targets.size == 1) "" else "s"}")
+            .setMessage(Texts.files(targets.size))
             .setCancelable(false)
             .create()
         progress.show().also { d -> SecureScreen.secure(d) }
@@ -338,7 +291,7 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
-    private fun copyThenRemove(treeUri: Uri, item: Item): Boolean {
+    private fun copyThenRemove(treeUri: Uri, item: LibraryItem): Boolean {
         val resolver = contentResolver
         return try {
             val parent = DocumentsContract.buildDocumentUriUsingTree(
@@ -390,10 +343,10 @@ class LibraryActivity : AppCompatActivity() {
                 deleteItems(targets)
             }
             .show()
-                .also { d -> SecureScreen.secure(d) }
+            .also { d -> SecureScreen.secure(d) }
     }
 
-    private fun deleteItems(targets: List<Item>) {
+    private fun deleteItems(targets: List<LibraryItem>) {
         val uris = targets.map { it.uri }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // The system shows its own confirmation for media deletes; two gates, not one.
@@ -445,8 +398,8 @@ class LibraryActivity : AppCompatActivity() {
     // ---- duplicates ----------------------------------------------------------------
 
     private fun scanDuplicates() {
-        val byId = items.associateBy { it.id.toString() }
-        val entries = items.map { DuplicateScan.Entry(it.id.toString(), it.name) }
+        val byId = items.value.associateBy { it.id.toString() }
+        val entries = items.value.map { DuplicateScan.Entry(it.id.toString(), it.name) }
         val groups = DuplicateScan.duplicates(entries)
 
         if (groups.isEmpty()) {
@@ -459,7 +412,6 @@ class LibraryActivity : AppCompatActivity() {
             "• " + byId[g.first().id]?.name.orEmpty().take(40) + "  (+${g.size - 1})"
         }
         val more = if (groups.size > 3) "\n…and ${groups.size - 3} more" else ""
-
         MaterialAlertDialogBuilder(this)
             .setTitle("${Texts.duplicates(extras.size)} found")
             .setMessage(
@@ -469,7 +421,7 @@ class LibraryActivity : AppCompatActivity() {
             .setNegativeButton("Keep all", null)
             .setPositiveButton("Move extras") { _, _ -> quarantine(extras) }
             .show()
-                .also { d -> SecureScreen.secure(d) }
+            .also { d -> SecureScreen.secure(d) }
     }
 
     private fun quarantine(extras: List<DuplicateScan.Entry>) {
@@ -482,7 +434,7 @@ class LibraryActivity : AppCompatActivity() {
 
         val progress = MaterialAlertDialogBuilder(this)
             .setTitle("Moving duplicates…")
-            .setMessage("${extras.size} file${if (extras.size == 1) "" else "s"}")
+            .setMessage(Texts.files(extras.size))
             .setCancelable(false)
             .create()
         progress.show().also { d -> SecureScreen.secure(d) }
@@ -528,25 +480,12 @@ class LibraryActivity : AppCompatActivity() {
         val free = stat.availableBytes
         val total = stat.totalBytes
         if (total <= 0) return
-        val usedPct = (((total - free).toDouble() / total) * 100).toInt().coerceIn(0, 100)
-        findViewById<TextView>(R.id.storageText)?.text = String.format(
-            Locale.US,
-            "%s free of %s (device storage)",
-            human(free),
-            human(total),
-        )
-        findViewById<android.widget.ProgressBar>(R.id.storageBar)?.progress = usedPct
+        storageTextState.value = LibraryCopy.storageText(free, total)
+        storagePercentState.intValue = LibraryCopy.usedPercent(free, total)
     }
 
-    /** Storage numbers keep their own formatter; the badges use the tested helper. */
-    private fun human(bytes: Long): String {
-        val gb = bytes / (1024.0 * 1024.0 * 1024.0)
-        return if (gb >= 1) String.format(Locale.US, "%.1f GB", gb)
-        else String.format(Locale.US, "%.0f MB", bytes / (1024.0 * 1024.0))
-    }
-
-    private fun loadItems(): List<Item> {
-        val out = ArrayList<Item>()
+    private fun loadItems(): List<LibraryItem> {
+        val out = ArrayList<LibraryItem>()
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Downloads.EXTERNAL_CONTENT_URI
         } else {
@@ -584,7 +523,7 @@ class LibraryActivity : AppCompatActivity() {
                 while (c.moveToNext()) {
                     val uri = ContentUris.withAppendedId(collection, c.getLong(idCol))
                     out.add(
-                        Item(
+                        LibraryItem(
                             uri = uri,
                             name = c.getString(nameCol) ?: "video",
                             size = c.getLong(sizeCol),
@@ -599,36 +538,6 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    private inner class GridAdapter(var rows: List<Item>) : BaseAdapter() {
-        override fun getCount() = rows.size
-        override fun getItem(position: Int): Any = rows[position]
-        override fun getItemId(position: Int) = position.toLong()
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-            val view = convertView ?: LayoutInflater.from(this@LibraryActivity)
-                .inflate(R.layout.item_library, parent, false)
-            val item = rows[position]
-            val thumb = view.findViewById<ImageView>(R.id.libThumb)
-            val label = view.findViewById<TextView>(R.id.libName)
-            val size = view.findViewById<TextView>(R.id.libSize)
-            val duration = view.findViewById<TextView>(R.id.libDuration)
-            val overlay = view.findViewById<View>(R.id.libSelectedOverlay)
-            val check = view.findViewById<TextView>(R.id.libCheck)
-
-            label.text = item.name
-            size.text = LibraryFormat.size(item.size)
-            duration.text = LibraryFormat.duration(item.durationMs)
-
-            val isSelected = selected.contains(item.id)
-            overlay.visibility = if (isSelected) View.VISIBLE else View.GONE
-            check.visibility = if (isSelected) View.VISIBLE else View.GONE
-
-            // Stage 5b: decoded on a worker thread, never in getView().
-            LibraryThumbLoader.load(this@LibraryActivity, item.uri, thumb)
-            return view
-        }
-    }
 
     private companion object {
         const val DUPLICATES_RELATIVE_PATH = "Download/VideoDroid/duplicates"

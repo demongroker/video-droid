@@ -106,12 +106,31 @@ object UpdateChecker {
 
         when (decision.action) {
             UpdateAction.NONE -> if (decision.message.isNotBlank()) report(activity, decision.message)
-            UpdateAction.SHOW_DOWNLOADING,
+            // Offline stays a message, not a modal: the user can do nothing about it from a sheet.
+            UpdateAction.SHOW_OFFLINE -> report(activity, decision.message)
+            UpdateAction.SHOW_DOWNLOADING -> {
+                // A launch check never covers the screen while a download runs: the status line
+                // and the header chip carry it. A user-initiated check opens the progress sheet.
+                if (activity is MainActivity && userInitiated) {
+                    activity.showUpdateDecision(decision, latestVersion, info.apkUrl)
+                } else {
+                    report(activity, decision.message)
+                }
+            }
             UpdateAction.SHOW_READY,
-            UpdateAction.SHOW_OFFLINE,
-            UpdateAction.WAIT_FOR_WIFI -> report(activity, decision.message)
+            UpdateAction.WAIT_FOR_WIFI,
             UpdateAction.SHOW_FAILED,
-            UpdateAction.PROMPT -> promptForDownload(activity, latestVersion, info.apkUrl, decision)
+            UpdateAction.PROMPT -> {
+                if (activity is MainActivity) {
+                    // The Download screen hosts the progress sheet (single decision gate still
+                    // applies: UpdatePrompt decided, the sheet only renders the decision).
+                    activity.showUpdateDecision(decision, latestVersion, info.apkUrl)
+                } else when (decision.action) {
+                    UpdateAction.SHOW_FAILED,
+                    UpdateAction.PROMPT -> promptForDownload(activity, latestVersion, info.apkUrl, decision)
+                    else -> report(activity, decision.message)
+                }
+            }
         }
     }
 
@@ -217,7 +236,11 @@ object UpdateChecker {
         }
     }
 
-    private fun startDownload(activity: Activity, version: String, apkUrl: String) {
+    /**
+     * Single-flight download start with the network/Wi-Fi guards. Public so the progress
+     * sheet's Download/Retry button uses the exact same gate as the legacy dialog.
+     */
+    fun startDownload(activity: Activity, version: String, apkUrl: String) {
         val app = activity.applicationContext
         // Belt and braces: the service refuses a second start, but asking here
         // means the user gets "downloading (x%)" instead of a silent no-op.
@@ -253,6 +276,20 @@ object UpdateChecker {
             },
             Toast.LENGTH_SHORT,
         ).show()
+    }
+
+    /**
+     * Install entry for the progress sheet: only ever offered after the service marked the
+     * job VERIFIED (signing pin + published checksum both passed). A missing file is reported,
+     * never installed around the gate.
+     */
+    fun offerInstall(activity: Activity) {
+        val apk = File(activity.cacheDir, "VideoDroid-update.apk")
+        if (!apk.isFile) {
+            Toast.makeText(activity, "Update file is missing — check for updates again", Toast.LENGTH_LONG).show()
+            return
+        }
+        promptInstall(activity, apk)
     }
 
     /**
