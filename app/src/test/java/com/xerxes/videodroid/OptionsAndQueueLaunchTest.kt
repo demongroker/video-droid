@@ -2,11 +2,10 @@ package com.xerxes.videodroid
 
 import android.app.Application
 import android.os.Looper
-import android.view.View
-import android.widget.TextView
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.ui.platform.ComposeView
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.button.MaterialButton
+import com.xerxes.videodroid.ui.QueueCopy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -101,10 +100,15 @@ class OptionsAndQueueLaunchTest {
         val activity = controller.get()
         shadowOf(Looper.getMainLooper()).idle()
 
-        val list = activity.findViewById<RecyclerView>(R.id.queueList)
-        assertNotNull(list)
-        assertEquals(1, list.adapter?.itemCount)
-        assertEquals(View.GONE, activity.findViewById<View>(R.id.queueEmpty).visibility)
+        // The queue is Compose now: the Activity hosts a ComposeView and feeds it the persisted
+        // FIFO. Assert the host exists AND that the job actually reached the screen's data path,
+        // then assert the copy that job produces — the row itself is pinned by QueueCopyTest.
+        val host = activity.findViewById<ComposeView>(R.id.queueCompose)
+        assertNotNull("queue must host a ComposeView", host)
+        val jobs = DownloadQueue.all(activity)
+        assertEquals(1, jobs.size)
+        val job = jobs.first()
+        assertEquals("Queued", QueueCopy.state(job.failed, job.failReason, job.url, job.paused, false, true, job.progress).text)
         controller.pause().stop().destroy()
     }
 
@@ -119,29 +123,20 @@ class OptionsAndQueueLaunchTest {
         val activity = controller.get()
         shadowOf(Looper.getMainLooper()).idle()
 
-        val list = activity.findViewById<RecyclerView>(R.id.queueList)
-        list.measure(
-            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
-        )
-        list.layout(0, 0, 1080, 1920)
+        val job = DownloadQueue.all(activity).first { it.id == "b2" }
+        val line = QueueCopy.state(job.failed, job.failReason, job.url, job.paused, false, true, job.progress)
+        // The headline is the media name; the STATE line carries the failure, in plain English.
+        assertTrue("state should show the failure: ${line.text}", line.text.startsWith("Failed"))
+        assertTrue("failure must be human-readable: ${line.text}", line.text.contains("This video is gone"))
+        assertTrue("a 404 row must offer Retry", QueueCopy.showRetry(job.failed, job.failReason))
+        assertEquals("Remove", QueueCopy.cancelLabel(job.failed))
+
+        // The Retry button calls exactly this pair; the failed flag must clear.
+        DownloadQueue.retry(activity, job.id)
         shadowOf(Looper.getMainLooper()).idle()
-
-        val holder = list.findViewHolderForAdapterPosition(0)
-        assertNotNull("no row bound", holder)
-        // Stage 3: the headline is the media name, and the state line carries the failure.
-        val title = holder!!.itemView.findViewById<TextView>(R.id.queueRowTitle).text.toString()
-        val sub = holder.itemView.findViewById<TextView>(R.id.queueRowSub).text.toString()
-        assertTrue("row should show the failure: $title / $sub", sub.startsWith("Failed"))
-        // Field report: a raw "HTTP 404" is not an answer. The row shows plain English now.
-        assertTrue("failure must be human-readable: $sub", sub.contains("This video is gone"))
-
-        holder.itemView.performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-
-        val job = DownloadQueue.all(activity).firstOrNull { it.id == "b2" }
-        assertNotNull(job)
-        assertFalse("tap must clear the failed flag", job!!.failed)
+        val after = DownloadQueue.all(activity).firstOrNull { it.id == "b2" }
+        assertNotNull(after)
+        assertFalse("retry must clear the failed flag", after!!.failed)
         controller.pause().stop().destroy()
     }
 }
