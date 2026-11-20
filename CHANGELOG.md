@@ -2,6 +2,32 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.6.0 (versionCode 106)
+
+### Queue rebuilt in Compose — navy + gold
+
+- **The queue screen is Compose now** (`ui/QueueScreen.kt`), the first slice of the app-wide
+  migration away from the XML/Compose hybrid. The Activity keeps every side effect; the screen
+  only renders state and reports intent.
+- **New theme** (`ui/theme/VideoDroidTheme.kt`): navy + gold, real dark and light schemes, one
+  type scale, 12 dp cards / 8 dp controls. Same tokens as Hermes 0.1.4.
+- **Rows are cards**: thumbnail + real title, a colour-coded state line (amber paused/waiting,
+  gold downloading, red failed), quality and live speed/ETA underneath, and a progress bar.
+- **Swipe gestures replaced by visible buttons.** Share and Cancel/Remove are now explicit, so
+  a mis-swipe can no longer remove a row. Open appears when there is a finished file.
+- **Empty state** says what to do next ("Paste a link on the Download tab") with a button that
+  goes there, instead of a bare line of text.
+- **Bulk actions in a menu**: Retry failed (n) / Clear failed (n) / Clear all, unchanged behaviour.
+- Row copy and action rules moved into a pure, unit-tested object (`QueueCopy`, 14 tests):
+  the failure reason stays in the state line, offline is exactly "Waiting for connection",
+  a failed row says Remove and has no Pause, and Retry appears only for retryable errors.
+
+### Unchanged on purpose
+
+Pause still keeps the partial file, Cancel still asks first and stops only that row, the
+1-second refresh cadence, the persisted FIFO, and the bottom navigation (still the shared XML
+bar — it migrates with the other tabs).
+
 ## 2.5.8 (versionCode 105)
 
 ### Dependency refresh

@@ -1,74 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Queue is Compose now (ui/QueueScreen.kt). This shell only carries the insets root and the
+  shared bottom navigation, which is still the XML bar used by the other tabs.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/queueRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Queue"
-            android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/queuePauseAll"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="Pause all" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/queueClear"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="Clear" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/queueEmpty"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:padding="24dp"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="Paste a link to start"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="@color/vd_text_dim" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/queueEmptyGo"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Go to Download"
-            android:textAllCaps="false"
-            android:textColor="@color/vd_violet_soft" />
-    </LinearLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/queueList"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/queueCompose"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false" />
+        android:layout_weight="1" />
 
     <include layout="@layout/bottom_nav" />
 </LinearLayout>

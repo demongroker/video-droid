@@ -1,43 +1,39 @@
 package com.xerxes.videodroid
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.FileProvider
-import androidx.recyclerview.widget.DividerItemDecoration
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.xerxes.videodroid.ui.Insets
+import com.xerxes.videodroid.ui.QueueScreen
+import com.xerxes.videodroid.ui.theme.VideoDroidTheme
 import java.io.File
 
 /**
  * Queue: what is downloading now, what is waiting, and what failed.
  *
- * Rows reflect the same persisted FIFO the service drains.
- * Swipe left  -> cancel / remove (asks first).
- * Swipe right -> share (the finished file, or the link while pending).
- * Tap a failed row -> retry.
+ * The list is Compose ([QueueScreen]); this Activity owns every side effect and the persisted
+ * FIFO it reads. Swipe gestures were replaced by explicit Share / Cancel buttons — a mis-swipe
+ * can no longer remove a row, and the actions are discoverable.
+ *
+ * Contracts unchanged: pause keeps the partial file, cancel asks first and stops only that row,
+ * retry appears only for retryable errors, and the failure reason stays in the state line.
  */
 class QueueActivity : AppCompatActivity() {
 
-    private lateinit var list: RecyclerView
-    private lateinit var empty: View
-    private lateinit var clear: View
-    private lateinit var pauseAll: com.google.android.material.button.MaterialButton
     private val handler = Handler(Looper.getMainLooper())
     private var ticker: Runnable? = null
-    private var jobs: List<QueuedJob> = emptyList()
-    private val adapter = QueueAdapter()
+
+    // Compose state: the 1 s ticker writes these, the screen recomposes. No re-setContent.
+    private val jobs = mutableStateOf<List<QueuedJob>>(emptyList())
+    private val pausedCount = mutableIntStateOf(0)
+    private val online = mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,64 +42,57 @@ class QueueActivity : AppCompatActivity() {
         SecureScreen.apply(window)
         NavHelper.wire(this, R.id.tab_queue)
 
-        list = findViewById(R.id.queueList)
-        empty = findViewById(R.id.queueEmpty)
-        findViewById<View>(R.id.queueEmptyGo).setOnClickListener {
-            // Land on the Download tab, replacing this screen in the back stack.
-            startActivity(
-                Intent(this, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            )
-            finish()
-        }
-        clear = findViewById(R.id.queueClear)
-        pauseAll = findViewById(R.id.queuePauseAll)
-
-        list.layoutManager = LinearLayoutManager(this)
-        list.addItemDecoration(
-            DividerItemDecoration(this, DividerItemDecoration.VERTICAL),
-        )
-        list.adapter = adapter
-
-        clear.setOnClickListener { showQueueMenu(it) }
-
-        // Pause all keeps every partial file and progress, so resuming continues the
-        // transfers instead of restarting them. Toggles to "Resume all" while paused.
-        pauseAll.setOnClickListener {
-            if (DownloadQueue.pausedCount(this) > 0) {
-                DownloadService.resumeAll(this)
-            } else {
-                DownloadService.pauseAll(this)
-            }
-            reload()
-        }
-
-        attachSwipeActions()
-    }
-
-    private fun attachSwipeActions() {
-        val cb = object : ItemTouchHelper.SimpleCallback(
-            0,
-            ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,
-        ) {
-            override fun onMove(
-                rv: RecyclerView,
-                vh: RecyclerView.ViewHolder,
-                target: RecyclerView.ViewHolder,
-            ): Boolean = false
-
-            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {
-                val job = jobs.getOrNull(vh.bindingAdapterPosition) ?: return
-                if (direction == ItemTouchHelper.LEFT) {
-                    cancelOne(job)
-                } else {
-                    share(job)
-                }
-                // The row is redrawn from state: keep it if the user says Keep.
-                handler.post { reload() }
+        findViewById<ComposeView>(R.id.queueCompose).setContent {
+            VideoDroidTheme {
+                QueueScreen(
+                    jobs = jobs.value,
+                    pausedCount = pausedCount.intValue,
+                    online = online.value,
+                    isClaimed = { id -> DownloadQueue.isClaimed(id) },
+                    liveDetail = { id -> DownloadService.liveDetail(id) },
+                    loadThumb = { job, iv -> QueueThumb.load(this, job, iv) },
+                    onOpen = { job -> openItem(job) },
+                    onRetry = { job -> retry(job) },
+                    onCancel = { job -> cancelOne(job) },
+                    onShare = { job -> share(job) },
+                    onPauseToggle = { job ->
+                        if (job.paused) DownloadService.resumeOne(this, job.id)
+                        else DownloadService.pauseOne(this, job.id)
+                        reload()
+                    },
+                    onPauseAll = {
+                        // Pause all keeps every partial file and progress, so resuming
+                        // continues the transfers instead of restarting them.
+                        if (DownloadQueue.pausedCount(this) > 0) DownloadService.resumeAll(this)
+                        else DownloadService.pauseAll(this)
+                        reload()
+                    },
+                    onRetryFailed = {
+                        val n = DownloadQueue.retryAllFailed(this)
+                        DownloadService.resume(this)
+                        toast("Retrying $n item(s)")
+                        reload()
+                    },
+                    onClearFailed = {
+                        val n = DownloadQueue.clearFailed(this)
+                        toast("Cleared $n failed item(s)")
+                        reload()
+                    },
+                    onClearAll = { confirmStopAll() },
+                    onGoDownload = {
+                        startActivity(
+                            Intent(this, MainActivity::class.java)
+                                .addFlags(
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                                ),
+                        )
+                        finish()
+                    },
+                )
             }
         }
-        ItemTouchHelper(cb).attachToRecyclerView(list)
+        reload()
     }
 
     override fun onResume() {
@@ -123,20 +112,15 @@ class QueueActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    /** Reads the persisted queue into Compose state. */
     private fun reload() {
-        val latest = DownloadQueue.all(this)
-        if (latest != jobs) {
-            jobs = latest
-            adapter.notifyDataSetChanged()
-        }
-        val none = jobs.isEmpty()
-        empty.visibility = if (none) View.VISIBLE else View.GONE
-        list.visibility = if (none) View.GONE else View.VISIBLE
-        clear.visibility = if (none) View.GONE else View.VISIBLE
+        jobs.value = DownloadQueue.all(this)
+        pausedCount.intValue = DownloadQueue.pausedCount(this)
+        online.value = isOnline()
+    }
 
-        val paused = DownloadQueue.pausedCount(this)
-        pauseAll.visibility = if (none) View.GONE else View.VISIBLE
-        pauseAll.text = if (paused > 0) "Resume all ($paused)" else "Pause all"
+    private fun toast(text: String) {
+        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun share(job: QueuedJob) {
@@ -195,7 +179,7 @@ class QueueActivity : AppCompatActivity() {
             .setPositiveButton(if (running) "Stop" else "Remove") { _, _ ->
                 if (running) {
                     // Stop **this** row only. The notification's Cancel button is the
-                    // stop-everything path; a swipe here must not kill the other downloads.
+                    // stop-everything path; a row action must not kill the other downloads.
                     FormatWorker.requestCancel(
                         job.id,
                         FormatWorker.partialDirFor(this, job.url, job.localPath),
@@ -207,11 +191,6 @@ class QueueActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Bulk actions. Retry failed / Clear failed are the two that matter after a batch of bad
-     * links — ten dead X rows should be one tap to clear, not ten swipes, and one tap to retry
-     * once X login is sorted out.
-     */
     /** Cheap connectivity read, used only to word the row state. */
     private fun isOnline(): Boolean = runCatching {
         val cm = getSystemService(android.net.ConnectivityManager::class.java)
@@ -220,34 +199,6 @@ class QueueActivity : AppCompatActivity() {
         val caps = cm.getNetworkCapabilities(net) ?: return@runCatching false
         caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }.getOrDefault(false)
-
-    private fun showQueueMenu(anchor: View) {
-        val failed = jobs.count { it.failed }
-        val menu = android.widget.PopupMenu(this, anchor)
-        var idx = 0
-        val retryId = if (failed > 0) { menu.menu.add(0, idx++, 0, "Retry failed ($failed)"); idx - 1 } else -1
-        val clearFailedId = if (failed > 0) { menu.menu.add(0, idx++, 1, "Clear failed ($failed)"); idx - 1 } else -1
-        menu.menu.add(0, idx++, 2, "Clear all")
-        menu.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                retryId -> {
-                    val n = DownloadQueue.retryAllFailed(this)
-                    DownloadService.resume(this)
-                    android.widget.Toast.makeText(this, "Retrying $n item(s)", android.widget.Toast.LENGTH_SHORT).show()
-                    reload()
-                    true
-                }
-                clearFailedId -> {
-                    val n = DownloadQueue.clearFailed(this)
-                    android.widget.Toast.makeText(this, "Cleared $n failed item(s)", android.widget.Toast.LENGTH_SHORT).show()
-                    reload()
-                    true
-                }
-                else -> { confirmStopAll(); true }
-            }
-        }
-        menu.show()
-    }
 
     private fun confirmStopAll() {
         val running = DownloadQueue.inFlightIds().size
@@ -264,86 +215,5 @@ class QueueActivity : AppCompatActivity() {
                 reload()
             }
             .show()
-    }
-
-    private inner class QueueAdapter : RecyclerView.Adapter<QueueAdapter.Holder>() {
-
-        inner class Holder(v: View) : RecyclerView.ViewHolder(v) {
-            val title: TextView = v.findViewById(R.id.queueRowTitle)
-            val sub: TextView = v.findViewById(R.id.queueRowSub)
-            val bar: LinearProgressIndicator = v.findViewById(R.id.queueRowProgress)
-            val thumb: android.widget.ImageView = v.findViewById(R.id.queueRowThumb)
-            val retry: com.google.android.material.button.MaterialButton =
-                v.findViewById(R.id.queueRowRetry)
-            val cancel: com.google.android.material.button.MaterialButton =
-                v.findViewById(R.id.queueRowCancel)
-            val pause: com.google.android.material.button.MaterialButton =
-                v.findViewById(R.id.queueRowPause)
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-            val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_queue, parent, false)
-            return Holder(v)
-        }
-
-        override fun getItemCount(): Int = jobs.size
-
-        override fun onBindViewHolder(holder: Holder, position: Int) {
-            val job = jobs.getOrNull(position) ?: return
-            val running = DownloadQueue.isClaimed(job.id)
-
-            // Stage 3: the real name is the headline; state, quality, speed and ETA sit
-            // underneath it where they can be scanned without reading the whole row.
-            val online = isOnline()
-            val state = when {
-                job.failed -> "Failed — ${ErrorText.human(job.failReason.ifBlank { "tap retry" }, job.url)}"
-                job.paused -> if (job.progress > 0) "Paused · ${job.progress}%" else "Paused"
-                running -> if (job.progress > 0) "Downloading ${job.progress}%" else "Downloading…"
-                !online -> "Waiting for connection"
-                else -> if (job.progress > 0) "Queued · ${job.progress}%" else "Queued"
-            }
-            holder.title.text = job.displayName.ifBlank { job.url }.trim()
-            // While an item is actually transferring, show the live speed/ETA from yt-dlp
-            // rather than just the quality tag — that is the number worth glancing at.
-            val detail = if (running) DownloadService.liveDetail(job.id) else ""
-            holder.sub.text = listOf(state, job.opts.dlQuality, detail)
-                .filter { it.isNotBlank() }
-                .joinToString(" · ")
-
-            holder.thumb.setTag(R.id.queueRowThumb, job.id)
-            QueueThumb.load(this@QueueActivity, job, holder.thumb)
-
-            if (job.progress > 0 || running) {
-                holder.bar.visibility = View.VISIBLE
-                holder.bar.setProgressCompat(job.progress.coerceIn(0, 100), false)
-            } else {
-                holder.bar.visibility = View.GONE
-            }
-
-            // Explicit retry on failed rows instead of "tap the row and hope".
-            // Retry hides itself when the error is not retryable ("no video in this post").
-            holder.retry.visibility =
-                if (job.failed && ErrorText.retryable(job.failReason)) View.VISIBLE else View.GONE
-            holder.retry.setOnClickListener { retry(job) }
-
-            // Failed rows get Remove instead of Cancel: same call, clearer word.
-            holder.cancel.visibility = View.VISIBLE
-            holder.cancel.text = if (job.failed) "Remove" else "Cancel"
-            holder.cancel.setOnClickListener { cancelOne(job) }
-
-            // Pause/Resume per row. Failed rows have nothing to pause.
-            holder.pause.visibility = if (job.failed) View.GONE else View.VISIBLE
-            holder.pause.text = if (job.paused) "Resume" else "Pause"
-            holder.pause.setOnClickListener {
-                if (job.paused) DownloadService.resumeOne(this@QueueActivity, job.id)
-                else DownloadService.pauseOne(this@QueueActivity, job.id)
-                reload()
-            }
-
-            holder.itemView.setOnClickListener {
-                if (job.failed) retry(job) else openItem(job)
-            }
-        }
     }
 }
