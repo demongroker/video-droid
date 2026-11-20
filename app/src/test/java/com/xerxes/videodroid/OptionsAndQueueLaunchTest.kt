@@ -2,6 +2,7 @@ package com.xerxes.videodroid
 
 import android.app.Application
 import android.os.Looper
+import android.view.View
 import androidx.compose.ui.platform.ComposeView
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.button.MaterialButton
