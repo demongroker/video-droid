@@ -40,6 +40,10 @@ class AboutActivity : AppCompatActivity() {
             Haptics.tick(this)
             UpdateChecker.check(this, version, userInitiated = true)
         }
+        findViewById<Button>(R.id.aboutShare).setOnClickListener {
+            Haptics.tick(this)
+            ShareApp.share(this)
+        }
         findViewById<Button>(R.id.aboutChangelog).setOnClickListener { showChangelog() }
         findViewById<Button>(R.id.aboutCrashLogs).setOnClickListener {
             runCatching { startActivity(Intent(this, CrashLogActivity::class.java)) }

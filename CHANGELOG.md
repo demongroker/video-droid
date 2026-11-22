@@ -2,6 +2,23 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.8.0 (versionCode 109)
+
+### New — share the app itself
+
+- **"Share this app"** in About, under *Check for updates*. Copies the installed APK into the
+  app's own cache and hands it to the Android share sheet as a package archive, so another phone
+  can sideload the exact same signed build over WhatsApp, Telegram, email and so on.
+- The APK is copied into a `shared/` cache path exposed only through the app's `FileProvider`;
+  nothing else in the cache becomes shareable, and the copy is an ordinary cache file the OS can
+  reclaim.
+- Share-sheet failures surface as a toast and are logged; a failed share never crashes the app.
+
+### Fixed — build host
+
+- `compileSdk 37` now resolves on a current SDK install (platform dir `android-37.0`), and the
+  Chaquopy build host pins Python 3.12 explicitly instead of relying on auto-detection.
+
 ## 2.7.1 (versionCode 108)
 
 ### Changed — cards read as panels, not as one dark mass

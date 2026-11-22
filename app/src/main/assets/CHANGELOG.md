@@ -2,6 +2,17 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.7.1 (versionCode 108)
+
+### Changed — cards read as panels, not as one dark mass
+
+- **Card surface `#1B2740` → `#22314F`** and every card (library tiles, queue rows, status
+  cards) now carries a **1 dp `#2A3A57` edge**. Same tokens as Hermes, Vela and JellyAmp.
+- **Danger red `#F85149` → `#FF7469`** — the lighter card dropped refusal text to 3.87:1; it is
+  now 4.91:1. Measured, not assumed: body 11.00:1, muted 6.33:1, gold 6.16:1, success 5.10:1,
+  warning 5.13:1 on the new card.
+- Light mode unchanged: primary stays the darkened gold `#7A5F14` (6.04:1 on white).
+
 ## 2.7.0 (versionCode 107)
 
 ### Library + Download rebuilt in Compose — navy + gold everywhere
