@@ -77,12 +77,8 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Stage 4: thumbnails must never appear in the recent-apps snapshot. The Library is
-        // always secure, independent of the SECURE_SCREENS setting used by the other screens.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
+        // Screenshot policy comes from SecureScreen (setting-backed, default = allowed).
+        SecureScreen.apply(window)
         setContentView(R.layout.activity_library)
         Insets.applyTo(findViewById(R.id.libraryRoot))
         NavHelper.sync(this, R.id.tab_library)

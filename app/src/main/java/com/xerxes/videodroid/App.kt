@@ -35,6 +35,9 @@ class App : PyApplication() {
         // Optional Material You: applies before the first activity inflates.
         runCatching { Appearance.apply(this) }
 
+        // Screenshot policy: read the choice before any window is created.
+        runCatching { SecureScreen.refresh(this) }
+
         // Finished job diagnostics are written to filesDir/diag.log (redacted) so the log
         // survives a process death — the one moment someone actually needs it.
         JobDiag.install(this)

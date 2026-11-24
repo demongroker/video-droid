@@ -80,6 +80,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.libraryLockButton).setOnClickListener { toggleLibraryLock() }
         findViewById<Button>(R.id.hideGalleryButton).setOnClickListener { toggleHideGallery() }
         refreshPrivacyRows()
+        setupScreenshotsSwitch()
 
         val versionLabel = findViewById<android.widget.TextView>(R.id.settingsVersion)
         versionLabel.text = "VideoDroid ${installedVersion()}"
@@ -389,6 +390,19 @@ class SettingsActivity : AppCompatActivity() {
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("videodroid-log", blob))
         toast("Log copied")
+    }
+
+    // ---- screenshots (allowed by default) ----------------------------------------------
+
+    private fun setupScreenshotsSwitch() {
+        val sw = findViewById<android.widget.CompoundButton>(R.id.screenshotsSwitch) ?: return
+        sw.isChecked = SecureScreen.allowScreenshots(this)
+        sw.setOnCheckedChangeListener { _, checked ->
+            SecureScreen.setAllowScreenshots(this, checked)
+            SecureScreen.apply(window)
+            Haptics.tick(this)
+            toast(if (checked) "Screenshots allowed" else "Screenshots blocked")
+        }
     }
 
     private fun installedVersion(): String =

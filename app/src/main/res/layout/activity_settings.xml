@@ -192,6 +192,15 @@
                 android:textAllCaps="false"
                 android:textColor="@color/vd_text_dim" />
 
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/screenshotsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="Allow screenshots"
+                android:textAllCaps="false"
+                android:textColor="@color/vd_text_dim" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
