@@ -2,6 +2,17 @@
 
 Private phone app. Updates: public GitHub Releases (no token in the APK).
 
+## 2.8.1 (versionCode 110)
+
+### Screenshots and one-tap share
+
+- **Screenshots are allowed again.** A new Settings switch ("Allow screenshots") controls the
+  `FLAG_SECURE` protection; the flag is only applied while the switch is off, and there is no
+  hidden viewer list.
+- **One tap from the share sheet.** VideoDroid now registers a single share target, so sharing a
+  link downloads it straight away using the saved format/quality/size defaults instead of asking
+  which options to use each time.
+
 ## 2.8.0 (versionCode 109)
 
 ### New — share the app itself
