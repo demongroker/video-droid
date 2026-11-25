@@ -1,8 +1,9 @@
-## 2.9.1
+## 2.9.2
 
 ### Fixed
-- Launcher icon now verified inside the shipped APK (adaptive foreground/background,
-  monochrome layer, regenerated legacy mipmaps at every density).
+- Adaptive launcher foreground/monochrome vectors now declare android:height (missing in 2.9.1,
+  which left a plain red circle on Android 14 launchers) and the play mark sits inside the
+  66dp safe zone.
 
 ## 2.9.0
 
