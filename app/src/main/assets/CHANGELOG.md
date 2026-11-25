@@ -1,6 +1,14 @@
-# VideoDroid changelog
+## 2.9.1
 
-Private phone app. Updates: public GitHub Releases (no token in the APK).
+### Fixed
+- Launcher icon now verified inside the shipped APK (adaptive foreground/background,
+  monochrome layer, regenerated legacy mipmaps at every density).
+
+## 2.9.0
+
+### Changed
+- New bold adaptive launcher icon: thick white play mark on a hot-red to orange gradient,
+  with monochrome layer (Android 13+ themed icons) and regenerated legacy mipmaps.
 
 ## 2.8.1 (versionCode 110)
 
