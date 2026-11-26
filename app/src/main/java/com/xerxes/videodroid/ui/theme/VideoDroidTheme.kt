@@ -26,20 +26,20 @@ import androidx.compose.ui.unit.sp
  * Gold never carries text on a light surface — the light scheme uses a darkened gold.
  */
 object VdPalette {
-  val NavyBase = Color(0xFF0B1220)
-  val NavyElevated = Color(0xFF111A2B)
-  val NavyCard = Color(0xFF22314F)
-  val NavyOutline = Color(0xFF2A3A57)
+  val NavyBase = Color(0xFF0B0F14)
+  val NavyElevated = Color(0xFF141013)
+  val NavyCard = Color(0xFF2A1A1D)
+  val NavyOutline = Color(0xFF3D262A)
 
-  val Gold = Color(0xFFD4AF37)
-  val GoldOnLight = Color(0xFF7A5F14)
-  val GoldContainerDark = Color(0xFF3A2E10)
-  val GoldContainerLight = Color(0xFFF5E7BE)
+  val Gold = Color(0xFFFB7185)
+  val GoldOnLight = Color(0xFFBE123C)
+  val GoldContainerDark = Color(0xFF4C0519)
+  val GoldContainerLight = Color(0xFFFFE4E6)
 
-  val TextOnNavy = Color(0xFFE6EDF7)
-  val TextMutedOnNavy = Color(0xFFA9B6CC)
-  val TextOnLight = Color(0xFF101828)
-  val TextMutedOnLight = Color(0xFF48566E)
+  val TextOnNavy = Color(0xFFFFF1F2)
+  val TextMutedOnNavy = Color(0xFFD6B4B8)
+  val TextOnLight = Color(0xFF241014)
+  val TextMutedOnLight = Color(0xFF6B4A4E)
 
   val Success = Color(0xFF3FB950)
   val Warning = Color(0xFFD29922)
@@ -78,8 +78,8 @@ private val DarkScheme = darkColorScheme(
   primary = VdPalette.Gold,
   onPrimary = VdPalette.NavyBase,
   primaryContainer = VdPalette.GoldContainerDark,
-  onPrimaryContainer = Color(0xFFF0DFA8),
-  secondary = Color(0xFF8FA3C8),
+  onPrimaryContainer = Color(0xFFFFE4E6),
+  secondary = Color(0xFFFDBA74),
   onSecondary = VdPalette.NavyBase,
   background = VdPalette.NavyBase,
   onBackground = VdPalette.TextOnNavy,
@@ -97,7 +97,7 @@ private val LightScheme = lightColorScheme(
   onPrimary = Color.White,
   primaryContainer = VdPalette.GoldContainerLight,
   onPrimaryContainer = VdPalette.GoldContainerDark,
-  secondary = Color(0xFF41547A),
+  secondary = Color(0xFFC2410C),
   onSecondary = Color.White,
   background = Color(0xFFF7F8FA),
   onBackground = VdPalette.TextOnLight,
