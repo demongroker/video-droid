@@ -1,3 +1,9 @@
+## 2.9.4 (versionCode 116)
+
+### Changed
+- In-app palette now matches the launcher icon: ember red/orange accents on the same dark field.
+- Refreshed adaptive and legacy launcher artwork.
+
 ## 2.9.2
 
 ### Fixed
