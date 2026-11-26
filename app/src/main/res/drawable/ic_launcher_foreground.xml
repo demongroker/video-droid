@@ -1,9 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="100" android:viewportHeight="100">
-    <!-- Play mark centred inside the 66dp safe zone (19.5..80.5 in this viewport). -->
-    <path android:pathData="M40,32 L72,50 L40,68 Z" android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF" android:strokeWidth="6"
-        android:strokeLineJoin="round" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M40,30 L40,78 L78,54 Z"/>
 </vector>
